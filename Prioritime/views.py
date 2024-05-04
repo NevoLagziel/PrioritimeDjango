@@ -16,8 +16,8 @@ from django.template.loader import render_to_string
 from django.utils.encoding import force_str
 from django.contrib import messages
 import jwt
+from config import JWT_SECRET_KEY
 
-JWT_SECRET_KEY = 'b907eca04dbcfea48612202e4011372d9900702fbbee9bb337dab1ba4e7d3424'
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_DELTA = timedelta(days=1)
 

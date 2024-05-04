@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+from config import EMAIL_HOST_PASSWORD
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -124,7 +125,7 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587  # SMTP server port (587 for TLS, 465 for SSL)
 EMAIL_HOST_USER = 'prioritime.application@gmail.com'  # SMTP server username
-EMAIL_HOST_PASSWORD = 'vvaelwcwrrtudgvi'  # SMTP server password
+EMAIL_HOST_PASSWORD = EMAIL_HOST_PASSWORD  # SMTP server password
 EMAIL_USE_TLS = True  # Enable TLS encryption (True/False)
 EMAIL_USE_SSL = False
 

@@ -2,7 +2,7 @@ from datetime import datetime
 
 
 class CalendarItem:
-    def __init__(self, name, description, duration, recurring, category, tags, reminders, location):
+    def __init__(self, name, recurring, description=None,  duration=None, category=None, tags=None, reminders=30, location=None):
         self.name = name
         self.description = description
         self.duration = duration
@@ -48,7 +48,7 @@ class Schedule:
         self.start_time = start_time
         self.end_time = end_time
         self.event_list = event_list
-        self.free_times = self.check_free_times
+        self.free_times = self.free_time_init
         self.day_off = day_off
 
     def set_day_off(self, day_off=False):
@@ -60,27 +60,49 @@ class Schedule:
     def set_end_time(self, end_time):
         self.start_time = end_time
 
-    def check_free_times(self):
+    def free_time_init(self):
         free_times = []
         s_time = self.start_time
         for event in self.event_list:
             if event.start_time > s_time:
                 free_times.append(FreeTimeSpace(s_time, event.start_time))
                 s_time = event.end_time
+
         if s_time < self.end_time:
             free_times.append(FreeTimeSpace(s_time, self.start_time))
+
         return free_times
 
-    def add_event(self, event):
+    def check_time_availability(self, start_time, duration):
+        end_time = start_time + duration
+        if self.start_time > start_time or end_time > self.end_time:
+            return False
+
+        for event in self.event_list:
+            if event.end_time > start_time and event.start_time < end_time:
+                return False
+            else:
+                return True
+
+    def add_event(self, new_event):
         added = False
-        for index, eve in self.event_list:
-            if eve.start_time > event.start_time:
+        for index, event in self.event_list:
+            if event.start_time > new_event.start_time:
                 added = True
-                self.event_list.insert(index, event)
+                self.event_list.insert(index, new_event)
                 break
+
         if not added:
-            self.event_list.append(event)
-        self.free_times = self.check_free_times()
+            self.event_list.append(new_event)
+
+        self.free_times = self.free_time_init()
+
+    # def remove_event(self, removed_event):
+    #     removed = False
+    #     for index, event in self.event_list:
+    #
+
+    # def change_event_time(self, event, new_start_time):
 
 
 class FreeTimeSpace:

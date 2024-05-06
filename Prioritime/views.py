@@ -21,6 +21,8 @@ from config import JWT_SECRET_KEY
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_DELTA = timedelta(days=1)
 
+users_collection = db['users']
+
 
 def index(request):
     return HttpResponse("Hello, world. You're at the k")
@@ -48,8 +50,6 @@ def register(request):
         email = request.POST.get('email')
         password = request.POST.get('password')
         if email and password:
-            users_collection = db['users']
-
             if users_collection.find_one({'email': email}):
                 return JsonResponse({'message': 'User with this email already exists'}, status=400)
 
@@ -87,7 +87,7 @@ def send_confirmation_email(email, confirmation_token):
         'confirmation_link': settings.FRONTEND_BASE_URL + '/confirm-email/' + confirmation_token
     })
     try:
-        send_mail(subject, message, settings.EMAIL_HOST_USER, [email])
+        send_mail(subject, message='', html_message=message, from_email=settings.EMAIL_HOST_USER, recipient_list=[email])
         return HttpResponse('Confirmation email sent successfully.')
     except BadHeaderError:
         return HttpResponse('Invalid header found.')
@@ -97,7 +97,6 @@ def send_confirmation_email(email, confirmation_token):
 
 def confirm_email(request, token):
     # Retrieve the user with the given confirmation token
-    users_collection = db['users']
     user = users_collection.find_one({'confirmation_token': token})
 
     if user:
@@ -120,8 +119,6 @@ def login(request):
         email = request.POST.get('email')
         password = request.POST.get('password')
         if email and password:
-            users_collection = db['users']
-
             # Retrieve user document from MongoDB
             user = users_collection.find_one({'email': email})
 
@@ -150,3 +147,29 @@ def protected_resource(request):
         return Response({'message': f'Hello, {user.email}! This is a protected resource.'})
     else:
         return Response({'error': 'Invalid or expired token'}, status=401)
+
+
+@api_view(['GET'])
+def get_calendar_events(request):
+    # Extract JWT token from request headers
+    jwt_token = request.headers.get('Authorization')
+
+    # Verify JWT token
+    user_id = verify_jwt_token(jwt_token)
+    if not user_id:
+        return JsonResponse({'error': 'Invalid or expired token'}, status=401)
+
+    user_db = db.find_one({})
+    # Proceed to retrieve calendar events for the authenticated user
+    # Your logic to retrieve and return calendar events goes here...
+
+
+@api_view(['POST'])
+def create_calendar_event(request):
+    # Extract JWT token from request headers
+    jwt_token = request.headers.get('Authorization')
+
+    # Verify JWT token
+    user_id = verify_jwt_token(jwt_token)
+    if not user_id:
+        return JsonResponse({'error': 'Invalid or expired token'}, status=401)

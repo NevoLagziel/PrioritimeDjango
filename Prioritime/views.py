@@ -1,3 +1,4 @@
+from functools import wraps
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.utils.http import urlsafe_base64_decode
@@ -15,11 +16,8 @@ import uuid
 from django.template.loader import render_to_string
 from django.utils.encoding import force_str
 from django.contrib import messages
-import jwt
-from config import JWT_SECRET_KEY
-
-JWT_ALGORITHM = 'HS256'
-JWT_EXPIRATION_DELTA = timedelta(days=1)
+from .utils import generate_jwt_token, verify_jwt_token
+from . import mongoApi
 
 users_collection = db['users']
 
@@ -28,27 +26,31 @@ def index(request):
     return HttpResponse("Hello, world. You're at the k")
 
 
-def generate_jwt_token(_id):
-    payload = {
-        'user_id': _id,
-        'exp': timezone.now() + JWT_EXPIRATION_DELTA  # Token expiry time (24 hours from now)
-    }
-    return jwt.encode(payload, JWT_SECRET_KEY, JWT_ALGORITHM)
+# Wrapper function that versify the user
+def user_authorization(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if 'Authorization' not in request.headers:
+            return Response({'error': 'Authorization header is missing'}, status=401)
+        jwt_token = request.headers.get('Authorization')
+        user_id = verify_jwt_token(jwt_token)
+        if not user_id:
+            return Response({'error': 'error recovering jwt token'}, status=400)
 
+        user = mongoApi.find_user_by_id(user_id)
+        if not user:
+            return Response({'error': 'could not find user'}, status=400)
 
-def verify_jwt_token(token):
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, JWT_ALGORITHM)
-        return payload['user_id']
-    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
-        return None
+        return view_func(request, user_id, *args, **kwargs)
+
+    return wrapper
 
 
 @api_view(['POST'])
 def register(request):
     if request.method == 'POST':
-        email = request.POST.get('email')
-        password = request.POST.get('password')
+        email = request.data.get('email')
+        password = request.data.get('password')
         if email and password:
             if users_collection.find_one({'email': email}):
                 return JsonResponse({'message': 'User with this email already exists'}, status=400)
@@ -64,7 +66,8 @@ def register(request):
                 'email': email,
                 'password': hashed_password,
                 'confirmation_token': confirmation_token,
-                'email_confirmed': False
+                'email_confirmed': False,
+                'calendar': [],
             }
 
             # Insert user document into MongoDB
@@ -87,7 +90,8 @@ def send_confirmation_email(email, confirmation_token):
         'confirmation_link': settings.FRONTEND_BASE_URL + '/confirm-email/' + confirmation_token
     })
     try:
-        send_mail(subject, message='', html_message=message, from_email=settings.EMAIL_HOST_USER, recipient_list=[email])
+        send_mail(subject, message='', html_message=message, from_email=settings.EMAIL_HOST_USER,
+                  recipient_list=[email])
         return HttpResponse('Confirmation email sent successfully.')
     except BadHeaderError:
         return HttpResponse('Invalid header found.')
@@ -116,8 +120,8 @@ def confirm_email(request, token):
 @api_view(['POST'])
 def login(request):
     if request.method == 'POST':
-        email = request.POST.get('email')
-        password = request.POST.get('password')
+        email = request.daat.get('email')
+        password = request.data.get('password')
         if email and password:
             # Retrieve user document from MongoDB
             user = users_collection.find_one({'email': email})
@@ -137,39 +141,24 @@ def login(request):
 
 
 @api_view(['GET'])
-def protected_resource(request):
-    if 'Authorization' not in request.headers:
-        return Response({'error': 'Authorization header is missing'}, status=401)
-    token = request.headers['Authorization'].split()[1]
-    user = verify_jwt_token(token)
-    if user:
-        # This is a protected resource, you can return data specific to the authenticated user
-        return Response({'message': f'Hello, {user.email}! This is a protected resource.'})
-    else:
-        return Response({'error': 'Invalid or expired token'}, status=401)
+@user_authorization
+def get_schedule(request, user_id):  # doesn't work yet
+    if request.method == 'GET':
+        date = {'year': request.data.get('year'), 'month': request.data.get('month'), 'day': request.data.get('day')}
+        # date = {'year': year, 'month': month, 'day': day}
+        schedule = mongoApi.get_schedule(user_id, date)
+        return JsonResponse(schedule)
 
-
-@api_view(['GET'])
-def get_calendar_events(request):
-    # Extract JWT token from request headers
-    jwt_token = request.headers.get('Authorization')
-
-    # Verify JWT token
-    user_id = verify_jwt_token(jwt_token)
-    if not user_id:
-        return JsonResponse({'error': 'Invalid or expired token'}, status=401)
-
-    user_db = db.find_one({})
-    # Proceed to retrieve calendar events for the authenticated user
-    # Your logic to retrieve and return calendar events goes here...
+    return Response({'error': 'wrong request'}, status=400)
 
 
 @api_view(['POST'])
-def create_calendar_event(request):
-    # Extract JWT token from request headers
-    jwt_token = request.headers.get('Authorization')
+@user_authorization
+def add_event(request, user_id):  # need to add an event creation function that checks if its fine to add it
+    if request.method == 'POST':
+        event = request.data.get('event')  # not getting an event from the front, getting details need to add function to build event
+        date = request.data.get('date')
+        mongoApi.add_event(user_id, event, date.year, date.month, date.day)
+        return Response({'success': 'new event added successfully'})
 
-    # Verify JWT token
-    user_id = verify_jwt_token(jwt_token)
-    if not user_id:
-        return JsonResponse({'error': 'Invalid or expired token'}, status=401)
+    return Response({'error': 'wrong request'}, status=400)

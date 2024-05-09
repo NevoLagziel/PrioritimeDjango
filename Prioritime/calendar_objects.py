@@ -2,7 +2,8 @@ from datetime import datetime
 
 
 class CalendarItem:
-    def __init__(self, name, recurring, description=None,  duration=None, category=None, tags=None, reminders=30, location=None):
+    def __init__(self, name, recurring, description=None, duration=None, category=None, tags=None, reminders=30,
+                 location=None):
         self.name = name
         self.description = description
         self.duration = duration
@@ -11,11 +12,11 @@ class CalendarItem:
         self.tags = tags
         self.reminders = reminders
         self.location = location
-        self.creation_date = datetime
+        self.creation_date = datetime.now().isoformat()
 
 
 class Event(CalendarItem):
-    def __init__(self, start_time, end_time, sub_event, **kwargs):
+    def __init__(self, start_time, end_time, sub_event=None, **kwargs):
         super().__init__(**kwargs)
         self.start_time = start_time
         self.end_time = end_time
@@ -42,7 +43,7 @@ class Tasks:
 
 
 class Schedule:
-    def __init__(self, date, day, start_time, end_time, event_list, day_off):
+    def __init__(self, date, day, start_time=None, end_time=None, event_list=None, day_off=None):
         self.date = date
         self.day = day
         self.start_time = start_time
@@ -50,6 +51,22 @@ class Schedule:
         self.event_list = event_list
         self.free_times = self.free_time_init
         self.day_off = day_off
+
+    def __dict__(self):
+        dict_event_list = []
+        if self.event_list:
+            for event in self.event_list:
+                dict_event_list.append(event.__dict__)
+
+        dict_schedule = {
+            'date': self.date,
+            'day': self.day,
+            'start_time': self.start_time,
+            'end_time': self.end_time,
+            'event_list': dict_event_list,
+            'day_off': self.day_off
+        }
+        return dict_schedule
 
     def set_day_off(self, day_off=False):
         self.day_off = day_off
@@ -112,11 +129,24 @@ class FreeTimeSpace:
 
 
 class MonthlyCalendar:
-    def __init__(self, date, number_of_days, starting_day, list_of_schedules):
-        self.date = date
+    def __init__(self, month, number_of_days, starting_day, list_of_schedules):
+        self.month = month
         self.number_of_days = number_of_days
         self.starting_day = starting_day
         self.list_of_schedules = list_of_schedules
+
+    def __dict__(self):
+        dict_list_of_schedules = []
+        for day in self.list_of_schedules:
+            dict_list_of_schedules.append(day.__dict__())
+
+        dict_monthly_calendar = {
+            'month': self.month,
+            'number_of_days': self.number_of_days,
+            'starting_day': self.starting_day,
+            'days': dict_list_of_schedules,
+        }
+        return dict_monthly_calendar
 
 
 class YearlyCalendar:
@@ -124,7 +154,18 @@ class YearlyCalendar:
         self.year = year
         self.list_of_monthly_calendars = list_of_monthly_calendars
 
+    def __dict__(self):
+        dict_list_of_monthly_calendars = []
+        for month in self.list_of_monthly_calendars:
+            dict_list_of_monthly_calendars.append(month.__dict__())
+
+        dict_yearly_calendar = {
+            'year': self.year,
+            'months': dict_list_of_monthly_calendars
+        }
+        return dict_yearly_calendar
+
 
 class Calendar:
-    def __init__(self, list_of_yearly_calendars):
+    def __init__(self, list_of_yearly_calendars=None):
         self.list_of_yearly_calendars = list_of_yearly_calendars

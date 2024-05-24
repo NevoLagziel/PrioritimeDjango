@@ -71,6 +71,7 @@ def register(request):
                 'email_confirmed': False,
                 'calendar': [],
                 'task_list': [],
+                'preferences': {},
             }
 
             # Insert user document into MongoDB
@@ -232,26 +233,22 @@ def add_event(request, user_id):  # need to handle case that event is in more th
             sub_event=sub_event,
         )
 
-        if event.recurring != "Once":
+        if event.recurring == "Once":
+            if not mongoApi.year_exists(user_id, int(date['year'])):
+                if not mongoApi.add_new_year(user_id, int(date['year'])):
+                    return JsonResponse({'error': 'problem adding new event to database'})
+
+            if mongoApi.add_event(user_id, event, date):
+                if mongoApi.increment_event_count(user_id, int(date['year'])):
+                    return JsonResponse({'success': 'new event added successfully'})
+
+        else:
             event.first_appearance = date
             result = mongoApi.add_recurring_event(user_id, event)
-        else:
-            if not mongoApi.year_exists(user_id, int(date['year'])):
-                mongoApi.add_new_year(user_id, int(date['year']))
-
-            # schedule_dict = mongoApi.get_schedule(user_id, date)  # no need if events could be at the same time
-            # schedule = dict_to_entities.dict_to_schedule(schedule_dict)  #
-            # if schedule.add_event(event):
-            #     result = mongoApi.update_schedule(user_id, date, schedule)
-            #     if result:
-            #         mongoApi.increment_event_count(user_id, int(date['year']))
-
-            result = mongoApi.add_event(user_id, event, date)
             if result:
-                mongoApi.add_recurring_event(user_id, int(date['year']))
                 return JsonResponse({'success': 'new event added successfully'})
-            else:
-                return JsonResponse({'error': 'problem adding new event to database'})
+
+        return JsonResponse({'error': 'problem adding new event to database'})
 
     return JsonResponse({'error': 'wrong request'}, status=400)
 
@@ -266,9 +263,9 @@ def add_task(request, user_id):
         recurring = request.data.get('recurring')  # string
         category = request.data.get('category')  # string
         tags = request.data.get('tags')  # list of strings
-        reminders = request.data.get('reminders')  # int (represents time in minutes)
+        # reminders = request.data.get('reminders')  # int (represents time in minutes)
         location = request.data.get('location')  # don't know yet (guess it would be X and Y or google maps object)
-        priority = request.data.get('priority')  # don't know yet
+        # priority = request.data.get('priority')  # don't know yet
         deadline = request.data.get('selectedDateTime')  # ISO string
         status = request.data.get('status')  # string
 
@@ -279,9 +276,9 @@ def add_task(request, user_id):
             recurring=recurring,
             category=category,
             tags=tags,
-            reminders=reminders,
+            # reminders=reminders,
             location=location,
-            priority=priority,
+            # priority=priority,
             deadline=deadline,
             status=status,
         )
@@ -374,6 +371,46 @@ def delete_task(request, user_id):
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
+@api_view(['PUT'])
+@user_authorization
+def edit_task(request, user_id):
+    if request.method == 'PUT':
+        # Extract the data from the request
+        task_id = request.data.get('_id')
+        updated_data = request.data
+        print(updated_data)
+
+        result = mongoApi.update_task(user_id, task_id, updated_data)
+
+        if result:
+            return JsonResponse({'message': 'Task updated successfully'})
+
+        return JsonResponse({'error': 'Task could not be updated or does not exist'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+
+@api_view(['PUT'])
+@user_authorization
+def edit_event(request, user_id):
+    if request.method == 'PUT':
+        event_id = request.data.get('_id')
+        updated_data = request.data
+        updated_data.pop('date')
+        date = datetime.strptime(request.data.get('date'), "%Y-%m-%d")
+        date = {'year': date.year, 'month': date.month, 'day': date.day}
+
+        event = mongoApi.get_event(user_id, date, event_id)
+        update_fields = {f"{key}": value for key, value in updated_data.items()}
+        event.update(update_fields)
+        print(event)
+        result = True
+        if result:
+            return JsonResponse({'message': 'Event updated successfully'})
+
+        return JsonResponse({'error': 'Event could not be updated or does not exist'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+
 @api_view(['GET'])
 @user_authorization
 def get_task_list(request, user_id):
@@ -383,5 +420,19 @@ def get_task_list(request, user_id):
             return JsonResponse(task_list)
 
         return JsonResponse({'error': 'Problem loading data'}, status=400)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@api_view(['POST'])
+@user_authorization
+def update_preferences(request, user_id):
+    if request.method == 'POST':
+        preference = request.data.get('preferences')
+        result = mongoApi.update_preferences(user_id, preference)
+        if result:
+            return JsonResponse({'message': 'Preferences updated successfully'})
+
+        return JsonResponse({'error': 'Problem updating preference'}, status=400)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)

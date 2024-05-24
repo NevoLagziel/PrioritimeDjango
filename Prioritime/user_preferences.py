@@ -28,7 +28,7 @@ class PreferenceManager:
 
     def apply_preferences(self, calendar_item):
 
-        # apply happens only when the user adds item to the calander
+        # apply happens only when the user adds item to the calendar
         # TODO understand where should that function be located
 
         preference = self.preferences.get(calendar_item.name)

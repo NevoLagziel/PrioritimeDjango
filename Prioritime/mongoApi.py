@@ -1,10 +1,7 @@
-from datetime import datetime
-
 from bson import ObjectId
 from db_connection import db
 from . import calendar_objects
 import calendar
-from .Model_Logic import dict_to_entities
 
 users = db['users']  # users collection
 
@@ -98,6 +95,28 @@ def get_event(user_id, date, event_id):
     return event_dict[0]
 
 
+def update_event(user_id, event_id, date, updated_data):
+    update_fields = {f"calendar.$[y].months.$[m].days.$[d].event_list.$[event].{key}": value for key, value in
+                     updated_data.items()}
+
+    result = users.update_one(
+        {
+            "_id": ObjectId(user_id),
+            "calendar.year": date['year'],
+            "calendar.months.month": date['month'],
+            "calendar.months.days.date": date['day']
+        },
+        {"$set": update_fields},
+        array_filters=[
+            {"y.year": date['year']},
+            {"m.month": date['month']},
+            {"d.date": date['day']},
+            {"event._id": event_id}
+        ]
+    )
+    return result.modified_count > 0
+
+
 def delete_event(user_id, date, event_id):
     user_id = ObjectId(user_id)
     year = int(date['year'])
@@ -121,10 +140,7 @@ def delete_event(user_id, date, event_id):
             {"d.date": day}
         ]
     )
-    if result.modified_count > 0:
-        return True
-
-    return False
+    return result.modified_count > 0
 
 
 def get_calendar(user_id):
@@ -218,10 +234,7 @@ def update_schedule(user_id, date, schedule):
             {"d.date": day}
         ]
     )
-    if result.modified_count == 0:
-        return False
-
-    return True
+    return result.modified_count > 0
 
 
 # not sure if needed
@@ -256,10 +269,7 @@ def add_new_year(user_id, year):
             }
         }
     )
-    if result.modified_count == 0:
-        return False
-
-    return True
+    return result.modified_count > 0
 
 
 # function for checking if a certain year is already presented in the database
@@ -284,10 +294,7 @@ def delete_year(user_id, year):
             }
         }
     )
-    if result.modified_count > 0:
-        return True
-
-    return False
+    return result.modified_count > 0
 
 
 # Function for adding a new event to a users database without checking collisions
@@ -295,9 +302,6 @@ def add_event(user_id, event, date):
     year = int(date['year'])
     month = int(date['month'])
     day = int(date['day'])
-    # if the year doesn't exist adds it
-    if not year_exists(user_id, year):
-        add_new_year(user_id, year)
 
     user_id = ObjectId(user_id)
     event_dict = event.__dict__()
@@ -321,11 +325,7 @@ def add_event(user_id, event, date):
             {"d.date": day}
         ]
     )
-    # If no matching document is found, create the necessary structure and add the event
-    if result.modified_count == 0:
-        return False
-
-    return True
+    return result.modified_count > 0
 
 
 def add_recurring_event(user_id, event):
@@ -339,10 +339,7 @@ def add_recurring_event(user_id, event):
             }
         }
     )
-    if result.modified_count == 0:
-        return False
-
-    return True
+    return result.modified_count > 0
 
 
 def get_recurring_events(user_id):
@@ -382,10 +379,7 @@ def add_task(user_id, task):
             }
         }
     )
-    if result.modified_count == 0:
-        return False
-
-    return True
+    return result.modified_count > 0
 
 
 def delete_task(user_id, task_id):
@@ -394,10 +388,19 @@ def delete_task(user_id, task_id):
         {"_id": user_id},
         {"$pull": {"task_list": {"_id": task_id}}}
     )
-    if result.modified_count > 0:
-        return True
+    return result.modified_count > 0
 
-    return False
+
+def update_task(user_id, task_id, updated_data):
+    user_id = ObjectId(user_id)
+    update_fields = {f"task_list.$[task].{key}": value for key, value in updated_data.items()}
+    print(update_fields)
+    result = users.update_one(
+        {"_id": ObjectId(user_id), "task_list._id": task_id},
+        {"$set": update_fields},
+        array_filters=[{"task._id": task_id}]
+    )
+    return result.modified_count > 0
 
 
 def check_no_events_in_year(user_id, year):
@@ -409,10 +412,7 @@ def check_no_events_in_year(user_id, year):
             "calendar.event_count": 0
         }
     )
-    if event_count_zero > 0:
-        return True
-
-    return False
+    return event_count_zero > 0
 
 
 def increment_event_count(user_id, year):
@@ -428,10 +428,7 @@ def increment_event_count(user_id, year):
             }
         }
     )
-    if result.modified_count > 0:
-        return True
-
-    return False
+    return result.modified_count > 0
 
 
 def decrement_event_count(user_id, year):
@@ -447,56 +444,87 @@ def decrement_event_count(user_id, year):
             }
         }
     )
-    if result.modified_count > 0:
-        return True
-
-    return False
+    return result.modified_count > 0
 
 
-# Two functions for handling reoccurring events
-def get_dally_schedule(user_id, date):
-    schedule_dict = get_schedule(user_id, date)
-    if schedule_dict:
-        schedule = dict_to_entities.dict_to_schedule(schedule_dict)
-    else:
-        day = int(date['day'])
-        month = int(date['month'])
-        year = int(date['year'])
-        schedule = calendar_objects.Schedule(
-            date=int(date['day']),
-            day=(calendar.weekday(year, month, day) + 1),
-            start_time=None,
-            end_time=None,
+def update_preferences(user_id, preference):
+    user_id = ObjectId(user_id)
+    result = users.update_one(
+        {'_id': user_id},
+        {'$set': {'preferences.'+preference['name']: preference}}
+    )
+    return result.modified_count > 0
 
 
-        )
-    recurring_events = get_recurring_events(user_id)
-    if recurring_events:
-        for recurring_event_dict in recurring_events:
-            recurring_event = dict_to_entities.dict_to_event(recurring_event_dict)
-            if is_recurring_on_date(recurring_event, date):
-                schedule.add_event(recurring_event)
+# def add_event_to(user_id):
+#     user_id = ObjectId(user_id)
+#     event = calendar_objects.Event(
+#         name='name',
+#         description='description',
+#         start_time='12',
+#         end_time='13'
+#     ).__dict__()
+#     year = '2026'
+#     month = '12'
+#     day = '11'
+#     result = users.update_one(
+#         {'_id': user_id},
+#         {'$addToSet': {'calendar_dict.'+year+'.'+month+"."+day+".event_list": event}}
+#     )
+#     return result.modified_count > 0
 
-    return schedule
+
+# def get_dict_schedule(user_id):
+#     user_id = ObjectId(user_id)
+#     year = '2027'
+#     month = '10'
+#     day = '2'
+#
+#     schedule_dict = users.aggregate([
+#         {"$match": {"_id": user_id}},
+#         {"$unwind": "$calendar_dict."+year+"."+month+"."+day},
+#         {"$replaceRoot": {"newRoot": "$calendar_dict."+year+"."+month+"."+day}}
+#     ])
+#     schedule_dict = list(schedule_dict)
+#     print(schedule_dict)
+#     return schedule_dict[0]
 
 
-def is_recurring_on_date(recurring_event, target_date):
-    recurrence_pattern = recurring_event.recurring
-    if recurrence_pattern == 'Every Day':
-        return True
-    else:
-        first_appearance = datetime.strptime(recurring_event.first_appearance, "%Y-%m-%d")
-        target_date = datetime.strptime(target_date, "%Y-%m-%d")
-        if recurrence_pattern == 'Every Month':
-            if first_appearance.day == target_date.day:
-                return True
-
-        else:
-            delta_days = (target_date - first_appearance).days
-            if recurrence_pattern == 'Every Week':
-                return delta_days % 7 == 0
-
-            elif recurrence_pattern == 'Every 2 Weeks':
-                return delta_days % 14 == 0
-
-    return False
+# def calendar_as_dict(user_id):
+#     user_id = ObjectId(user_id)
+#     event_list = []
+#     year = '2025'
+#     calendar_dict = {
+#         "event_count": 0,
+#         '10':
+#             {
+#                 '1': {"event_list": event_list, "event_count": 0, "day": 7},
+#                 '2': {"event_list": event_list, "event_count": 0, "day": 7},
+#                 '3': {"event_list": event_list, "event_count": 0, "day": 7},
+#             },
+#         '11':
+#             {
+#                 '1': {"event_list": event_list, "event_count": 0, "day": 7},
+#                 '2': {"event_list": event_list, "event_count": 0, "day": 7},
+#                 '3': {"event_list": event_list, "event_count": 0, "day": 7},
+#             },
+#         '12':
+#             {
+#                 '1': {"event_list": event_list, "event_count": 0, "day": 7},
+#                 '2': {"event_list": event_list, "event_count": 0, "day": 7},
+#                 '3': {"event_list": event_list, "event_count": 0, "day": 7},
+#             }
+#
+#     }
+#     result = users.update_one(
+#         {"_id": user_id},
+#         {"$set": {"calendar_dict."+year: calendar_dict}}
+#     )
+#     year = '2024'
+#     month = '10'
+#     day = '2'
+#     result = users.find_one(
+#         {"_id": user_id},
+#         {"calendar_dict."+year+"."+month+"."+day: 1}
+#     )
+#     print(result)

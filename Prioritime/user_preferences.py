@@ -1,11 +1,14 @@
 import datetime
 from calendar_objects import CalendarItem
+from enum import Enum
 
 
 class Preference:
     class Preference:
-        def _init_(self, name, **details):
+        def _init_(self, name, day_part, possible_days, **details):
             self.name = name
+            self.possible_days = possible_days
+            self.day_part = day_part
             self.fields = details
 
         def get_fields(self, field_name):

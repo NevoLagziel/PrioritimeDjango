@@ -1,20 +1,21 @@
+import uuid
+from datetime import datetime
 from functools import wraps
-from django.http import HttpResponse
+
 from django.conf import settings
 from django.contrib.auth.hashers import make_password, check_password
-from django.http import JsonResponse
-from rest_framework.decorators import api_view
-from db_connection import db
 from django.core.mail import send_mail
-import uuid
+from django.http import HttpResponse
+from django.http import JsonResponse
 from django.template.loader import render_to_string
-from .utils import generate_jwt_token, verify_jwt_token
-from . import mongoApi
-from . import calendar_objects
-from datetime import datetime
-from .Model_Logic import dict_to_entities
-from db_connection import client
+from rest_framework.decorators import api_view
 
+from db_connection import db
+from .mongoDB import mongoApi, mongo_utils
+from .Model_Logic import dict_to_entities
+from . import utils
+
+# datetime_format = '%Y-%m-%d %H:%M:%S'
 users_collection = db['users']
 
 
@@ -29,7 +30,7 @@ def user_authorization(view_func):
         if 'Authorization' not in request.headers:
             return JsonResponse({'error': 'Authorization header is missing'}, status=401)
         jwt_token = request.headers.get('Authorization')
-        user_id = verify_jwt_token(jwt_token)
+        user_id = utils.verify_jwt_token(jwt_token)
         if not user_id:
             return JsonResponse({'error': 'error recovering jwt token'}, status=400)
 
@@ -53,9 +54,11 @@ def register(request):
     if request.method == 'POST':
         email = request.data.get('email')
         password = request.data.get('password')
+        first_name = request.data.get('firstName')
+        last_name = request.data.get('lastName')
         if email and password:
             if mongoApi.user_exists(email=email):
-                return JsonResponse({'message': 'User with this email already exists'}, status=400)
+                return JsonResponse({'error': 'User with this email already exists'}, status=400)
 
             # Generate confirmation token
             confirmation_token = str(uuid.uuid4())
@@ -65,6 +68,8 @@ def register(request):
 
             # Create user document
             user_data = {
+                'firstName': first_name,
+                'lastName': last_name,
                 'email': email,
                 'password': hashed_password,
                 'confirmation_token': confirmation_token,
@@ -80,7 +85,7 @@ def register(request):
                 return JsonResponse({'error': 'Failed to create user'}, status=400)
 
             # Generate JWT token
-            token = generate_jwt_token(str(_id))
+            token = utils.generate_jwt_token(str(_id))
 
             # Send confirmation email
             send_confirmation_email(email, confirmation_token)
@@ -158,7 +163,7 @@ def login(request):
             if user_info:
                 if check_password(password, user_info['password']):
                     if user_info['email_confirmed']:
-                        token = generate_jwt_token(str(user_info['_id']))
+                        token = utils.generate_jwt_token(str(user_info['_id']))
                         return JsonResponse({'token': token})
 
                     return JsonResponse({'error': 'Email not confirmed'})
@@ -168,6 +173,19 @@ def login(request):
             return JsonResponse({'error': 'User does not exist'}, status=404)
 
         return JsonResponse({'error': 'Email and password are required'}, status=402)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@api_view(['GET'])
+@user_authorization
+def get_user_info(request, user_id):
+    if request.method == 'GET':
+        result = mongoApi.get_user_info(user_id=user_id, fields=['first_name', 'last_name', 'email'])
+        if result:
+            return JsonResponse({result}, status=200)
+
+        return JsonResponse({'error': 'Problem fetching user data'}, status=404)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -187,12 +205,12 @@ def delete_user(request, user_id):
 
 @api_view(['GET'])
 @user_authorization
-def get_schedule(request, user_id):  # doesn't work yet
+def get_schedule(request, user_id):
     if request.method == 'GET':
         date = {'year': request.data.get('year'),
                 'month': request.data.get('month'),
                 'day': request.data.get('day')}
-        schedule = mongoApi.get_schedule(user_id, date)
+        schedule = mongo_utils.get_schedule(user_id, date)
         return JsonResponse(schedule.__dict__())
 
     return JsonResponse({'error': 'wrong request'}, status=400)
@@ -202,50 +220,16 @@ def get_schedule(request, user_id):  # doesn't work yet
 @user_authorization
 def add_event(request, user_id):  # need to handle case that event is in more than one day
     if request.method == 'POST':
-        name = request.data.get('name')  # str
-        description = request.data.get('description')  # str
-        duration = request.data.get('duration')  # Useless?
-        recurring = request.data.get('recurring')  # string
-        category = request.data.get('category')  # str
-        tags = request.data.get('tags')  # list of strings
-        reminders = request.data.get('reminders')  # int represents minutes
-        location = request.data.get('location')
-        start_time = request.data.get('start_time')  # datetime ISO string
-        end_time = request.data.get('end_time')  # datetime ISO string
-        sub_event = request.data.get('sub_event')
-        # date = datetime.strptime(start_time, '%Y-%m-%d')
-        date = {'year': request.data.get('year'),
-                'month': request.data.get('month'),
-                'day': request.data.get('day')}
+        event = dict_to_entities.create_new_event(request.data)
+        date = datetime.fromisoformat(event.start_time)
 
-        event = calendar_objects.Event(
-            name=name,
-            description=description,
-            duration=int(duration) if duration else (
-                    datetime.strptime(end_time, "%H:%M:%S") - datetime.strptime(start_time, "%H:%M:%S")),
-            recurring=recurring,
-            category=category,
-            tags=tags,
-            reminders=reminders,
-            location=location,
-            start_time=start_time,
-            end_time=end_time,  # if end_time else (int(start_time) + int(duration)),
-            sub_event=sub_event,
-        )
-
-        if event.recurring == "Once":
-            if not mongoApi.year_exists(user_id, int(date['year'])):
-                if not mongoApi.add_new_year(user_id, int(date['year'])):
-                    return JsonResponse({'error': 'problem adding new event to database'})
-
+        if event.frequency == "Once" or event.frequency is None:
             if mongoApi.add_event(user_id, event, date):
-                if mongoApi.increment_event_count(user_id, int(date['year'])):
-                    return JsonResponse({'success': 'new event added successfully'})
+                return JsonResponse({'success': 'new event added successfully'})
 
         else:
-            event.first_appearance = date
-            result = mongoApi.add_recurring_event(user_id, event)
-            if result:
+            event.first_appearance = date.isoformat()
+            if mongoApi.add_recurring_event(user_id, event):
                 return JsonResponse({'success': 'new event added successfully'})
 
         return JsonResponse({'error': 'problem adding new event to database'})
@@ -257,31 +241,10 @@ def add_event(request, user_id):  # need to handle case that event is in more th
 @user_authorization
 def add_task(request, user_id):
     if request.method == 'POST':
-        name = request.data.get('name')  # string
-        description = request.data.get('description')  # string
-        duration = request.data.get('duration')  # number of minutes
-        recurring = request.data.get('recurring')  # string
-        category = request.data.get('category')  # string
-        tags = request.data.get('tags')  # list of strings
-        # reminders = request.data.get('reminders')  # int (represents time in minutes)
-        location = request.data.get('location')  # don't know yet (guess it would be X and Y or google maps object)
-        # priority = request.data.get('priority')  # don't know yet
-        deadline = request.data.get('selectedDateTime')  # ISO string
-        status = request.data.get('status')  # string
+        task = dict_to_entities.create_new_task(user_id, request.data)
 
-        task = calendar_objects.Task(
-            name=name,
-            description=description,
-            duration=duration,
-            recurring=recurring,
-            category=category,
-            tags=tags,
-            # reminders=reminders,
-            location=location,
-            # priority=priority,
-            deadline=deadline,
-            status=status,
-        )
+        if not task:
+            return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
 
         result = mongoApi.add_task(user_id, task)
 
@@ -327,6 +290,21 @@ def get_monthly_calendar(request, user_id):
     return JsonResponse({'error': 'wrong request'}, status=400)
 
 
+@api_view(['PUT'])
+@user_authorization
+def edit_event(request, user_id):
+    if request.method == 'PUT':
+        event_id = request.data.get('_id')
+        new_date = datetime.fromisoformat(request.data.get('start_time'))
+        old_date = datetime.strptime(request.data.get('date'), "%Y-%m-%d")
+
+        if mongo_utils.update_event(user_id, old_date, new_date, event_id, request.data):
+            return JsonResponse({'message': 'Event updated successfully'})
+
+        return JsonResponse({'error': 'Event could not be updated or does not exist'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+
 @api_view(['DELETE'])
 @user_authorization
 def delete_event(request, user_id):
@@ -339,13 +317,7 @@ def delete_event(request, user_id):
         if not event_id or not date:
             return JsonResponse({'error': 'Missing required parameters'}, status=400)
 
-        success = mongoApi.delete_event(user_id, date, event_id)
-        if success:
-            mongoApi.decrement_event_count(user_id, int(date['year']))
-            event_count_empty = mongoApi.check_no_events_in_year(user_id, int(date['year']))
-            if event_count_empty:
-                mongoApi.delete_year(user_id, int(date['year']))
-
+        if mongoApi.delete_event(user_id, date, event_id):
             return JsonResponse({'message': 'Event deleted successfully'})
         else:
             return JsonResponse({'error': 'Event not found'}, status=404)
@@ -378,7 +350,6 @@ def edit_task(request, user_id):
         # Extract the data from the request
         task_id = request.data.get('_id')
         updated_data = request.data
-        print(updated_data)
 
         result = mongoApi.update_task(user_id, task_id, updated_data)
 
@@ -389,33 +360,12 @@ def edit_task(request, user_id):
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
-@api_view(['PUT'])
-@user_authorization
-def edit_event(request, user_id):
-    if request.method == 'PUT':
-        event_id = request.data.get('_id')
-        updated_data = request.data
-        updated_data.pop('date')
-        date = datetime.strptime(request.data.get('date'), "%Y-%m-%d")
-        date = {'year': date.year, 'month': date.month, 'day': date.day}
-
-        event = mongoApi.get_event(user_id, date, event_id)
-        update_fields = {f"{key}": value for key, value in updated_data.items()}
-        event.update(update_fields)
-        print(event)
-        result = True
-        if result:
-            return JsonResponse({'message': 'Event updated successfully'})
-
-        return JsonResponse({'error': 'Event could not be updated or does not exist'}, status=400)
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
-
-
 @api_view(['GET'])
 @user_authorization
 def get_task_list(request, user_id):
     if request.method == 'GET':
-        task_list = mongoApi.get_task_list(user_id)
+        date = request.data.get('date')
+        task_list = mongo_utils.get_task_list(user_id, date)
         if task_list:
             return JsonResponse(task_list)
 
@@ -424,7 +374,7 @@ def get_task_list(request, user_id):
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
-@api_view(['POST'])
+@api_view(['PUT'])
 @user_authorization
 def update_preferences(request, user_id):
     if request.method == 'POST':
@@ -436,3 +386,24 @@ def update_preferences(request, user_id):
         return JsonResponse({'error': 'Problem updating preference'}, status=400)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@api_view(['PUT'])
+@user_authorization
+def set_day_off(request, user_id):
+    if request.method == 'PUT':
+        day_off = request.data.get('day_off')
+        date = {'year': request.data.get('year'),
+                'month': request.data.get('month'),
+                'day': request.data.get('day')}
+
+        if mongoApi.update_day_off(user_id, date, day_off):
+            return JsonResponse({'message': 'Successfully updated'})
+
+        return JsonResponse({'error': 'problem updating day off'}, status=400)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+# def re_automate_month():
+

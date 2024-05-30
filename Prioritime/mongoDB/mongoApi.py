@@ -1,6 +1,6 @@
 from bson import ObjectId
 from db_connection import db
-from . import calendar_objects
+from Prioritime.Model_Logic import calendar_objects
 import calendar
 
 users = db['users']  # users collection
@@ -69,78 +69,6 @@ def get_user_info(user_id=None, email=None, fields=None):
         user_info = users.find_one({'email': email}, projection)
 
     return user_info
-
-
-def get_event(user_id, date, event_id):
-    user_id = ObjectId(user_id)
-    year = int(date['year'])
-    month = int(date['month'])
-    day = int(date['day'])
-    event_dict = users.aggregate([
-        {"$match": {"_id": user_id}},
-        {"$unwind": "$calendar"},
-        {"$match": {"calendar.year": year}},
-        {"$unwind": "$calendar.months"},
-        {"$match": {"calendar.months.month": month}},
-        {"$unwind": "$calendar.months.days"},
-        {"$match": {"calendar.months.days.date": day}},
-        {"$unwind": "$calendar.months.days.event_list"},
-        {"$match": {"calendar.months.days.event_list._id": event_id}},
-        {"$replaceRoot": {"newRoot": "$calendar.months.days.event_list"}}
-    ])
-    event_dict = list(event_dict)
-    if not event_dict:
-        return None
-
-    return event_dict[0]
-
-
-def update_event(user_id, event_id, date, updated_data):
-    update_fields = {f"calendar.$[y].months.$[m].days.$[d].event_list.$[event].{key}": value for key, value in
-                     updated_data.items()}
-
-    result = users.update_one(
-        {
-            "_id": ObjectId(user_id),
-            "calendar.year": date['year'],
-            "calendar.months.month": date['month'],
-            "calendar.months.days.date": date['day']
-        },
-        {"$set": update_fields},
-        array_filters=[
-            {"y.year": date['year']},
-            {"m.month": date['month']},
-            {"d.date": date['day']},
-            {"event._id": event_id}
-        ]
-    )
-    return result.modified_count > 0
-
-
-def delete_event(user_id, date, event_id):
-    user_id = ObjectId(user_id)
-    year = int(date['year'])
-    month = int(date['month'])
-    day = int(date['day'])
-    result = users.update_one(
-        {
-            "_id": user_id,
-            "calendar.year": year,
-            "calendar.months.month": month,
-            "calendar.months.days.date": day
-        },
-        {
-            "$pull": {
-                "calendar.$[y].months.$[m].days.$[d].event_list": {"_id": event_id}
-            }
-        },
-        array_filters=[
-            {"y.year": year},
-            {"m.month": month},
-            {"d.date": day}
-        ]
-    )
-    return result.modified_count > 0
 
 
 def get_calendar(user_id):
@@ -299,9 +227,13 @@ def delete_year(user_id, year):
 
 # Function for adding a new event to a users database without checking collisions
 def add_event(user_id, event, date):
-    year = int(date['year'])
-    month = int(date['month'])
-    day = int(date['day'])
+    year = date.year
+    month = date.month
+    day = date.day
+
+    if not year_exists(user_id, year):
+        if not add_new_year(user_id, year):
+            return False
 
     user_id = ObjectId(user_id)
     event_dict = event.__dict__()
@@ -325,7 +257,12 @@ def add_event(user_id, event, date):
             {"d.date": day}
         ]
     )
-    return result.modified_count > 0
+
+    if result.modified_count > 0:
+        if increment_event_count(user_id, year):
+            return True
+
+    return False
 
 
 def add_recurring_event(user_id, event):
@@ -351,7 +288,88 @@ def get_recurring_events(user_id):
             "_id": 0,
         }
     )
-    return recurring_events
+    return recurring_events['recurring_events']
+
+
+def get_event(user_id, date, event_id):
+    user_id = ObjectId(user_id)
+    year = int(date['year'])
+    month = int(date['month'])
+    day = int(date['day'])
+    event_dict = users.aggregate([
+        {"$match": {"_id": user_id}},
+        {"$unwind": "$calendar"},
+        {"$match": {"calendar.year": year}},
+        {"$unwind": "$calendar.months"},
+        {"$match": {"calendar.months.month": month}},
+        {"$unwind": "$calendar.months.days"},
+        {"$match": {"calendar.months.days.date": day}},
+        {"$unwind": "$calendar.months.days.event_list"},
+        {"$match": {"calendar.months.days.event_list._id": event_id}},
+        {"$replaceRoot": {"newRoot": "$calendar.months.days.event_list"}}
+    ])
+    event_dict = list(event_dict)
+    if not event_dict:
+        return None
+
+    return event_dict[0]
+
+
+def update_event(user_id, event_id, date, updated_data):
+    update_fields = {f"calendar.$[y].months.$[m].days.$[d].event_list.$[event].{key}": value for key, value in
+                     updated_data.items()}
+
+    result = users.update_one(
+        {
+            "_id": ObjectId(user_id),
+            "calendar.year": date['year'],
+            "calendar.months.month": date['month'],
+            "calendar.months.days.date": date['day']
+        },
+        {"$set": update_fields},
+        array_filters=[
+            {"y.year": date['year']},
+            {"m.month": date['month']},
+            {"d.date": date['day']},
+            {"event._id": event_id}
+        ]
+    )
+    return result.modified_count > 0
+
+
+def delete_event(user_id, date, event_id):
+    user_id = ObjectId(user_id)
+    year = int(date['year'])
+    month = int(date['month'])
+    day = int(date['day'])
+    result = users.update_one(
+        {
+            "_id": user_id,
+            "calendar.year": year,
+            "calendar.months.month": month,
+            "calendar.months.days.date": day
+        },
+        {
+            "$pull": {
+                "calendar.$[y].months.$[m].days.$[d].event_list": {"_id": event_id}
+            }
+        },
+        array_filters=[
+            {"y.year": year},
+            {"m.month": month},
+            {"d.date": day}
+        ]
+    )
+
+    if result.modified_count > 0:
+        if decrement_event_count(user_id, int(date['year'])):
+            if not check_empty_year(user_id, int(date['year'])):
+                return True
+
+            if delete_year(user_id, int(date['year'])):
+                return True
+
+    return False
 
 
 def get_task_list(user_id):  # returns tasks list as dictionary
@@ -403,7 +421,7 @@ def update_task(user_id, task_id, updated_data):
     return result.modified_count > 0
 
 
-def check_no_events_in_year(user_id, year):
+def check_empty_year(user_id, year):
     user_id = ObjectId(user_id)
     event_count_zero = users.count_documents(
         {
@@ -412,11 +430,18 @@ def check_no_events_in_year(user_id, year):
             "calendar.event_count": 0
         }
     )
-    return event_count_zero > 0
+
+    days_off_count_zero = users.count_documents(
+        {
+            "_id": user_id,
+            "calendar.year": year,
+            "calendar.days_off": 0
+        }
+    )
+    return event_count_zero > 0 and days_off_count_zero > 0
 
 
 def increment_event_count(user_id, year):
-    user_id = ObjectId(user_id)
     result = users.update_one(
         {
             "_id": user_id,
@@ -432,7 +457,6 @@ def increment_event_count(user_id, year):
 
 
 def decrement_event_count(user_id, year):
-    user_id = ObjectId(user_id)
     result = users.update_one(
         {
             "_id": user_id,
@@ -451,10 +475,103 @@ def update_preferences(user_id, preference):
     user_id = ObjectId(user_id)
     result = users.update_one(
         {'_id': user_id},
-        {'$set': {'preferences.'+preference['name']: preference}}
+        {'$set': {'preferences.' + preference['name']: preference}}
     )
     return result.modified_count > 0
 
+
+def find_preference(user_id, task_name):
+    user_id = ObjectId(user_id)
+    preference = users.find_one(
+        {'_id': user_id},
+        {
+            f'preferences.{task_name}': 1,
+            '_id': 0
+        }
+    )
+    return preference['preferences']
+
+
+def update_day_off(user_id, date, day_off):
+    year = int(date['year'])
+    month = int(date['month'])
+    day = int(date['day'])
+
+    year_exist = year_exists(user_id, year)
+
+    if not year_exist:
+        if day_off:
+            if not add_new_year(user_id, year):
+                return False
+
+        else:
+            return True
+
+    user_id = ObjectId(user_id)
+    result = users.update_one(
+        {
+            "_id": user_id,
+            "calendar.year": year,
+            "calendar.months.month": month,
+            "calendar.months.days.date": day
+        },
+        {
+            '$set': {
+                "calendar.$[y].months.$[m].days.$[d].day_off": day_off
+            }
+        },
+        array_filters=[
+            {"y.year": year},
+            {"m.month": month},
+            {"d.date": day}
+        ]
+    )
+
+    if not result.modified_count > 0:
+        return False
+
+    if day_off:
+        if increment_day_off_count(user_id, year):
+            return True
+    else:
+        if decrement_day_off_count(user_id, year):
+            if check_empty_year(user_id, year):
+                if delete_year(user_id, year):
+                    return True
+            else:
+                return True
+
+    return False
+
+
+def increment_day_off_count(user_id, year):
+    result = users.update_one(
+        {
+            "_id": user_id,
+            "calendar.year": year
+        },
+        {
+            "$inc": {
+                "calendar.$.days_off": 1
+            }
+        }
+    )
+    return result.modified_count > 0
+
+
+def decrement_day_off_count(user_id, year):
+    result = users.update_one(
+        {
+            "_id": user_id,
+            "calendar.year": year
+        },
+        {
+            "$inc": {
+                "calendar.$.days_off": -1
+            }
+        }
+    )
+    return result.modified_count > 0
 
 # def add_event_to(user_id):
 #     user_id = ObjectId(user_id)

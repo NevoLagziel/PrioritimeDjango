@@ -1,18 +1,21 @@
-import datetime
-from calendar_objects import CalendarItem
-from enum import Enum
-
-
 class Preference:
-    class Preference:
-        def _init_(self, name, day_part, possible_days, **details):
-            self.name = name
-            self.possible_days = possible_days
-            self.day_part = day_part
-            self.fields = details
+    def __init__(self, name, possible_days, day_part=None, **details):
+        self.name = name
+        self.possible_days = possible_days
+        self.day_part = day_part if day_part else {'morning': False, 'noon': False, 'evening': False}
+        self.fields = details
 
-        def get_fields(self, field_name):
-            return self.fields.get(field_name)
+    def get_fields(self, field_name):
+        return self.fields.get(field_name)
+
+    def __dict__(self):
+        preference_dict = {
+            'name': self.name,
+            'possible_days': self.possible_days,
+            'day_part': self.day_part,
+            'fields': self.fields,
+        }
+        return preference_dict
 
 
 class PreferenceManager:
@@ -22,7 +25,6 @@ class PreferenceManager:
     def add_preference(self, name, **attributes):
         self.preferences[name] = attributes
 
-    # TODO use the function below in apply
     def find_matching_preference(self, name):
         for preference in self.preferences:
             if preference.name.lower() == name.lower():
@@ -30,10 +32,6 @@ class PreferenceManager:
         return None
 
     def apply_preferences(self, calendar_item):
-
-        # apply happens only when the user adds item to the calendar
-        # TODO understand where should that function be located
-
         preference = self.preferences.get(calendar_item.name)
         if preference:
             overridden = any(getattr(calendar_item, key) is not None for key in preference)

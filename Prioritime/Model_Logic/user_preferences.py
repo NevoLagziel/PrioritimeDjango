@@ -38,34 +38,3 @@ class PreferenceManager:
             if not overridden:
                 for attr, value in preference.items():
                     setattr(calendar_item, attr, value)
-
-    # def create_calendar_item(self, name, recurring, **kwargs):
-    #     """Create a CalendarItem dynamically with possible preference application."""
-    #     item_attrs = {'name': name, 'recurring': recurring}
-    #
-    #     # If the item's name matches a preference and no additional attributes are specified,
-    #     # apply the preference attributes. Otherwise, use the provided attributes.
-    #     if name in self.preferences and not any(kwargs.values()):
-    #         item_attrs.update(self.preferences[name])
-    #     item_attrs.update(kwargs)
-    #
-    #     return CalendarItem(**item_attrs)
-
-    # def create_calendar_item(self, name, recurring, description=None, duration=None, category=None, tags=None,
-    #                          reminders=30, location=None, **kwargs):
-    #     matching_preference = self.preferences_manager.find_matching_preference(name)
-    #     if matching_preference and 'duration' not in kwargs:
-    #         duration = matching_preference.fields.get('duration', duration)
-    #         category = matching_preference.fields.get('category', category)
-    #         tags = matching_preference.fields.get('tags', tags)
-    #
-    #     if 'duration' in kwargs:
-    #         duration = kwargs['duration']
-    #     if 'category' in kwargs:
-    #         category = kwargs['category']
-    #     if 'tags' in kwargs:
-    #         tags = kwargs['tags']
-    #
-    #     return CalendarItem(name, recurring, description, duration, category, tags, reminders, location, **kwargs)
-
-    # TODO user should implement this class

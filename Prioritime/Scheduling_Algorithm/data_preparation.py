@@ -32,15 +32,15 @@ def data_preparation(user_id, task_list, begin_date, end_date):
         date = {'year': current_date.year, 'month': current_date.month, 'day': current_date.day}
         schedule = mongo_utils.get_schedule(user_id, date)
 
-        all_free_time_blocks.append(schedule.free_time_init(
-            datetime.strptime(general_preferences['start_time'], "%H:%M:%S")
-            .replace(year=date['year'], month=date['month'], day=date['day']),
-            datetime.strptime(general_preferences['end_time'], "%H:%M:%S")
-            .replace(year=date['year'], month=date['month'], day=date['day'])))
+        if not schedule.day_off:
+            all_free_time_blocks.append(schedule.free_time_init(
+                datetime.strptime(general_preferences['start_time'], "%H:%M:%S")
+                .replace(year=date['year'], month=date['month'], day=date['day']),
+                datetime.strptime(general_preferences['end_time'], "%H:%M:%S")
+                .replace(year=date['year'], month=date['month'], day=date['day'])))
 
         current_date = current_date + timedelta(days=1)
 
-    print(all_free_time_blocks)
     for task in task_list:
         if task.duration:
             preference_dict = mongoApi.find_preference(user_id, task.name)
@@ -95,3 +95,8 @@ def arrange_free_time_blocks(task, all_free_time_blocks):
                     task_free_time_blocks.append((start_time, task.deadline))
 
     return task_free_time_blocks
+
+
+def arrange_prev_schedule(task_list):
+    prev_schedule = {task.id(): task for task in task_list}
+    return prev_schedule

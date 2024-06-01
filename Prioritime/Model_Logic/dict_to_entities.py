@@ -53,7 +53,10 @@ def dict_to_schedule(schedule_dict):
     event_list = []
     if event_list_dict:
         for event_dict in event_list_dict:
-            event = dict_to_event(event_dict)
+            if event_dict['type'] == 'task':
+                event = dict_to_task(event_dict)
+            else:
+                event = dict_to_event(event_dict)
             event_list.append(event)
 
     schedule = calendar_objects.Schedule(
@@ -65,6 +68,21 @@ def dict_to_schedule(schedule_dict):
         day_off=schedule_dict['day_off']
     )
     return schedule
+
+
+def dict_to_monthly_calendar(monthly_calendar_dict):
+    schedule_list = []
+    for schedule_dict in monthly_calendar_dict['days']:
+        schedule = dict_to_schedule(schedule_dict)
+        schedule_list.append(schedule)
+
+    monthly_calendar = calendar_objects.MonthlyCalendar(
+        month=monthly_calendar_dict['month'],
+        number_of_days=monthly_calendar_dict['number_of_days'],
+        starting_day=monthly_calendar_dict['starting_day'],
+        list_of_schedules=schedule_list
+    )
+    return monthly_calendar
 
 
 def create_new_task(user_id, data):

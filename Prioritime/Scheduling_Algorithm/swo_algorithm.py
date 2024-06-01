@@ -3,30 +3,30 @@ from Prioritime.Scheduling_Algorithm.data_preparation import Activity
 
 
 # consider adding another score for activity that is just part in a preferred time
-def utility(activity, planned_start=None):  # need to think and check the scoring
+def utility(activity, planned_start=None, prev_start=None):  # need to think and check the scoring
     score = 0
     current_date = datetime.now()
 
     if not planned_start:  # for calculating the estimated utility
-        planned_start = find_best_start_time(activity)
+        planned_start = find_best_start_time(activity, prev_start)
 
     if not planned_start:
-        return -1
+        return float('-inf')
 
     if activity.deadline and planned_start:
         if planned_start + timedelta(minutes=activity.duration) > activity.deadline:
             return float('-inf')
 
         # Deadline urgency score based on current date
-        days_until_deadline_from_now = (activity.deadline - current_date).days
+        days_until_deadline_from_now = abs((activity.deadline - current_date).days)
         urgency_score_now = 1 / (days_until_deadline_from_now + 1)
 
         # Proximity of planned start to the deadline
-        days_until_deadline_from_planned_start = (activity.deadline - planned_start).days
+        days_until_deadline_from_planned_start = abs((activity.deadline - planned_start).days)
         proximity_score = 1 / (days_until_deadline_from_planned_start + 1)
 
         # Days between current date and planned start
-        days_from_now_to_planned_start = (planned_start - current_date).days
+        days_from_now_to_planned_start = abs((planned_start - current_date).days)
         start_proximity_score = 1 / (days_from_now_to_planned_start + 1)
 
         # Combine all scores with appropriate weights
@@ -46,10 +46,13 @@ def utility(activity, planned_start=None):  # need to think and check the scorin
         if planned_start.weekday() in activity.preferred_days:
             score += 3
 
+    if prev_start is not None and prev_start == planned_start:
+        score -= 15
+
     return score
 
 
-def find_best_start_time(activity):
+def find_best_start_time(activity, prev_start=None):
     best_start_time = None
     best_utility = float('-inf')
 
@@ -64,12 +67,12 @@ def find_best_start_time(activity):
                 date_pref_end = end.replace(hour=pref_end.hour, minute=pref_end.minute, second=pref_end.second)
                 if start <= date_pref_end and date_pref_start + timedelta(minutes=activity.duration) <= end:
                     if date_pref_start >= start:
-                        current_utility = utility(activity, date_pref_start)
+                        current_utility = utility(activity, date_pref_start, prev_start)
                         if current_utility > best_utility:
                             best_start_time = date_pref_start
                             best_utility = current_utility
                     else:
-                        current_utility = utility(activity, start)
+                        current_utility = utility(activity, start, prev_start)
                         if current_utility > best_utility:
                             best_start_time = start
                             best_utility = current_utility
@@ -77,7 +80,7 @@ def find_best_start_time(activity):
     # by calculating utility we're already considering if it's a preferred day
     #  if not best_start_time:
     for start, end in activity.free_blocks:
-        current_utility = utility(activity, start)
+        current_utility = utility(activity, start, prev_start)
         if current_utility > best_utility:
             best_start_time = start
             best_utility = current_utility
@@ -130,7 +133,16 @@ def sort_promotions(x):
     return util
 
 
-def schedule_activities(activities, max_iterations=1000, early_termination_consecutive=3):
+def same_schedule_results(current_plan, prev_schedule):
+    for task_id, task in prev_schedule.items():
+        current_start_time, current_end_time = current_plan[task_id]
+        if task.start_time != current_start_time or task.end_time != current_end_time:
+            return False
+
+    return True
+
+
+def schedule_activities(activities, max_iterations=1000, early_termination_consecutive=3, prev_schedule=None):
     best_plan = None
     best_utility = float('-inf')
     unscheduled_activities = None
@@ -139,16 +151,17 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
     for act in activities:
         filter_free_time_blocks(act)
 
-    activity_utilities = {activity.id: utility(activity) for activity in activities}
+    activity_utilities = {
+        activity.id: utility(activity, prev_start=prev_schedule[activity.id].start_time if prev_schedule is not None else None) for
+        activity in activities}
+
     # promotion_dict = dict.fromkeys(activity.id for activity in activities)
     promotions = []
-    print('activity utilities: ', activity_utilities)
+    # print('activity utilities: ', activity_utilities)
 
     base_pq = sorted(activities, key=lambda activity: -activity_utilities[activity.id])
 
-    iteration = 0
     for _ in range(max_iterations):
-        iteration = _
         # resting the free time blocks of each activity
         for activity in activities:
             activity.free_blocks = activity.total_free_blocks
@@ -173,14 +186,16 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 
         while pq:
             activity = pq.pop(0)
-            best_start_time = find_best_start_time(activity)
+            best_start_time = find_best_start_time(activity, prev_start=prev_schedule[
+                activity.id].start_time if prev_schedule is not None else None)
             if best_start_time:
                 planned_end = best_start_time + timedelta(minutes=activity.duration)
                 current_plan[activity.id] = (best_start_time, planned_end)
                 for other_activity in activities:
                     if current_plan[other_activity.id] is None:
                         update_free_time_blocks(other_activity, best_start_time, planned_end)
-                        new_utility = utility(other_activity)
+                        new_utility = utility(other_activity, prev_start=prev_schedule[
+                            activity.id].start_time if prev_schedule is not None else None)
                         if new_utility < activity_utilities[other_activity.id]:
                             if other_activity.id not in dict(promotions).keys():
                                 promotions.append((other_activity.id, (activity.id, new_utility)))
@@ -193,7 +208,14 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
         # Calculate utility including penalties for unscheduled activities
         current_utility = sum(
             utility(act, current_plan[act.id][0] if current_plan[act.id] else None) for act in activities)
+
         penalty = -len(current_unscheduled_activities) * 20  # Adjust the penalty weight as needed
+
+        # to make sure it would pick a different result
+        if prev_schedule is not None:
+            if same_schedule_results(current_plan, prev_schedule):
+                penalty += float('-inf')
+
         current_utility += penalty
 
         if current_utility > best_utility:
@@ -207,19 +229,15 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
         if consecutive_no_improvement >= early_termination_consecutive:
             break
 
-    return best_plan, best_utility, unscheduled_activities, iteration
+    return best_plan, unscheduled_activities
 
 
 # Example usage
 from Prioritime.Model_Logic.calendar_objects import Task
 from Prioritime.mongoDB import mongoApi
 from datetime import time
-from Prioritime.Scheduling_Algorithm.data_preparation import data_preparation
+from Prioritime.Scheduling_Algorithm.data_preparation import data_preparation, arrange_prev_schedule
 
-time_iso = time(hour=8).isoformat()
-print(time_iso)
-parsed_time = datetime.strptime(time_iso, "%H:%M:%S").time()
-print(parsed_time)
 
 user_id = '663cafd680b6dde278303f1d'
 general = {'name': 'general', 'start_time': time(hour=8).isoformat(), 'end_time': time(hour=20).isoformat()}
@@ -242,13 +260,28 @@ preference = {
 mongoApi.update_preferences(user_id, preference)
 
 task_list = [
-    Task(_id='123a4223sd', name='Task_1', deadline=datetime(2024, 12, 10), duration=40),
-    Task(_id='123as332rd', name='Task_2', deadline=datetime(2024, 8, 10), duration=20),
-    Task(_id='123fw3a4sd', name='Task_3', deadline=datetime(2024, 7, 10), duration=400),
-    Task(_id='123asf423d', name='Task_4', deadline=datetime(2024, 6, 10), duration=30),
-    Task(_id='123asf234d', name='Task_5', deadline=datetime(2024, 11, 10), duration=70),
-    Task(_id='123a3424sd', name='Task_6', deadline=datetime(2024, 12, 10), duration=90)
+    Task(_id='123a4223sd', name='Task_1', deadline=datetime(2024, 12, 10).isoformat(), duration=40,
+         start_time=datetime(2024, 6, 1, 14, 40).isoformat(), end_time=datetime(2024, 6, 1, 15, 20).isoformat()),
+
+    Task(_id='123as332rd', name='Task_2', deadline=datetime(2024, 8, 10).isoformat(), duration=20,
+         start_time=datetime(2024, 6, 3, 16, 0).isoformat(), end_time=datetime(2024, 6, 3, 16, 20).isoformat()),
+
+    Task(_id='123fw3a4sd', name='Task_3', deadline=datetime(2024, 7, 10).isoformat(), duration=400,
+         start_time=datetime(2024, 6, 1, 8, 0).isoformat(), end_time=datetime(2024, 6, 1, 14, 40).isoformat()),
+
+    Task(_id='123asf423d', name='Task_4', deadline=datetime(2024, 6, 10).isoformat(), duration=30,
+         start_time=datetime(2024, 6, 9, 8, 0).isoformat(), end_time=datetime(2024, 6, 9, 8, 30).isoformat()),
+
+    Task(_id='123asf234d', name='Task_5', deadline=datetime(2024, 11, 10).isoformat(), duration=70,
+         start_time=datetime(2024, 6, 3, 8, 0).isoformat(), end_time=datetime(2024, 6, 3, 9, 10).isoformat()),
+
+    Task(_id='123a3424sd', name='Task_6', deadline=datetime(2024, 12, 10).isoformat(), duration=90,
+         start_time=datetime(2024, 6, 1, 15, 20).isoformat(), end_time=datetime(2024, 6, 1, 16, 50).isoformat())
 ]
+activities = data_preparation(user_id, task_list, datetime(year=2024, month=6, day=1),
+                              datetime(year=2024, month=6, day=30))
+
+prev_schedule = arrange_prev_schedule(task_list)
 
 activities = data_preparation(user_id, task_list, datetime(year=2024, month=6, day=1),
                               datetime(year=2024, month=6, day=30))
@@ -269,10 +302,8 @@ activities = data_preparation(user_id, task_list, datetime(year=2024, month=6, d
 #              preferred_days=[0, 1, 2, 3, 4], preferred_times=[(datetime(2024, 5, 25, 13), datetime(2024, 5, 25, 17))]),
 # ]
 
-final_plan, final_utility, unschedule_tasks, iterations = schedule_activities(activities)
-print(f"After {iterations} iterations")
+final_plan, unschedule_tasks = schedule_activities(activities, prev_schedule=prev_schedule)
 print(f"plan: {final_plan} , unscheduled activities: {unschedule_tasks}")
-print(f"Total utility: {final_utility}")
 
 #
 #

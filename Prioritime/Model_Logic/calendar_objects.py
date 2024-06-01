@@ -5,7 +5,7 @@ from bson import ObjectId
 
 class CalendarItem:
     def __init__(self, name, _id=None, frequency=None, description=None, duration=None, category=None, tags=None,
-                 reminders=30, location=None, creation_date=datetime.now().isoformat()):
+                 reminders=30, location=None, creation_date=None):
         self._id = _id if _id is not None else str(ObjectId())
         self.name = name
         self.description = description
@@ -15,7 +15,7 @@ class CalendarItem:
         self.tags = tags
         self.reminders = reminders
         self.location = location
-        self.creation_date = creation_date
+        self.creation_date = creation_date if creation_date is not None else datetime.now().isoformat()
 
     def __dict__(self):
         calendar_item_dict = {
@@ -39,27 +39,33 @@ class CalendarItem:
 class Event(CalendarItem):
     def __init__(self, start_time, end_time, sub_event=None, first_appearance=None, **kwargs):
         super().__init__(**kwargs)
-        self.first_appearance = first_appearance
+        self.first_appearance = datetime.fromisoformat(first_appearance) if first_appearance is not None else None
         self.start_time = datetime.fromisoformat(start_time)
         self.end_time = datetime.fromisoformat(end_time)
         self.sub_event = sub_event
+        self.type = 'event'
 
     def __dict__(self):
         event_dict = super().__dict__()
-        event_dict["first_appearance"] = self.first_appearance
+        event_dict["first_appearance"] = None if self.first_appearance is None else self.first_appearance.isoformat()
         event_dict['start_time'] = self.start_time.isoformat()
         event_dict['end_time'] = self.end_time.isoformat()
         event_dict['sub_event'] = self.sub_event
+        event_dict['type'] = self.type
         return event_dict
 
 
 class Task(CalendarItem):
-    def __init__(self, priority=None, deadline=None, status=None, previous_done=None, **kwargs):
+    def __init__(self, priority=None, deadline=None, status=None, previous_done=None, start_time=None, end_time=None,
+                 **kwargs):
         super().__init__(**kwargs)
         self.priority = priority
         self.deadline = deadline if deadline is None else datetime.fromisoformat(deadline)
         self.status = status
-        self.previous_done = previous_done
+        self.previous_done = previous_done if previous_done is None else datetime.fromisoformat(previous_done)
+        self.start_time = start_time if start_time is None else datetime.fromisoformat(start_time)
+        self.end_time = end_time if end_time is None else datetime.fromisoformat(end_time)
+        self.type = 'task'
 
     def task_completed(self):
         self.status = 'done'
@@ -69,7 +75,35 @@ class Task(CalendarItem):
         task_dict['priority'] = self.priority
         task_dict['deadline'] = self.deadline if self.deadline is None else self.deadline.isoformat()
         task_dict['status'] = self.status
+        task_dict['previous_done'] = self.previous_done if self.previous_done is None else self.previous_done.isoformat()
+        task_dict['start_time'] = self.start_time if self.start_time is None else self.start_time.isoformat()
+        task_dict['end_time'] = self.end_time if self.end_time is None else self.end_time.isoformat()
+        task_dict['type'] = self.type
         return task_dict
+
+    def schedule(self, start_time=None, end_time=None):
+        self.start_time = start_time
+        self.end_time = end_time
+        if start_time is not None and end_time is not None:
+            self.status = 'scheduled'
+        else:
+            self.status = 'pending'
+
+    def generate_recurring_instance(self, deadline):
+        new_task = Task(
+            name=self.name,
+            description=self.description,
+            duration=self.duration,
+            category=self.category,
+            tags=self.tags,
+            reminders=self.reminders,
+            location=self.location,
+            creation_date=self.creation_date,
+            priority=self.priority,
+            deadline=deadline,
+            status='pending',
+        )
+        return new_task
 
 
 class Tasks:
@@ -92,6 +126,31 @@ class Tasks:
         for task in self.list_of_tasks:
             if task.deadline is not None and task.deadline.date() == deadline:
                 task_list.append(task)
+
+        return task_list
+
+    def filter_by(self, id_list=None, status=None, date=None):
+        task_list = []
+        for task in self.list_of_tasks:
+            if ((status is None or task.status == status)
+                    and (id_list is None or task.id() in id_list)
+                    and (date is None or (task.start_time is not None and task.start_time.date() == date))):
+                task_list.append(task)
+
+        return task_list
+
+    def filter_by_date(self, date_start=None, date_end=None):
+        task_list = []
+        if date_start is None:
+            return task_list
+
+        if date_end is None:
+            date_end = date_start
+
+        for task in self.list_of_tasks:
+            if task.start_time is not None:
+                if date_start <= task.start_time <= date_end:
+                    task_list.append(task)
 
         return task_list
 

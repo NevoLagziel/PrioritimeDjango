@@ -2,6 +2,7 @@ from bson import ObjectId
 from db_connection import db
 from Prioritime.Model_Logic import calendar_objects
 import calendar
+from . import mongo_utils
 
 users = db['users']  # users collection
 
@@ -168,26 +169,27 @@ def update_schedule(user_id, date, schedule):
 # not sure if needed
 def add_new_year(user_id, year):
     user = ObjectId(user_id)
-    list_of_monthly_calendars = []
-    for m in range(1, 13):
-        num_of_days = calendar.monthrange(year, m)[1]
-        list_of_schedules = []
-        for date in range(1, num_of_days + 1):
-            list_of_schedules.append(calendar_objects.Schedule(
-                date=date,
-                day=(calendar.weekday(year, m, date) + 1),
-            ))
-
-        list_of_monthly_calendars.append(calendar_objects.MonthlyCalendar(
-            month=m,
-            number_of_days=num_of_days,
-            starting_day=calendar.monthrange(year, m)[0],
-            list_of_schedules=list_of_schedules
-        ))
-    yearly_calendar = calendar_objects.YearlyCalendar(
-        year=year,
-        list_of_monthly_calendars=list_of_monthly_calendars
-    )
+    yearly_calendar = mongo_utils.create_new_year(year)
+    # list_of_monthly_calendars = []
+    # for m in range(1, 13):
+    #     num_of_days = calendar.monthrange(year, m)[1]
+    #     list_of_schedules = []
+    #     for date in range(1, num_of_days + 1):
+    #         list_of_schedules.append(calendar_objects.Schedule(
+    #             date=date,
+    #             day=(calendar.weekday(year, m, date) + 1),
+    #         ))
+    #
+    #     list_of_monthly_calendars.append(calendar_objects.MonthlyCalendar(
+    #         month=m,
+    #         number_of_days=num_of_days,
+    #         starting_day=calendar.monthrange(year, m)[0],
+    #         list_of_schedules=list_of_schedules
+    #     ))
+    # yearly_calendar = calendar_objects.YearlyCalendar(
+    #     year=year,
+    #     list_of_monthly_calendars=list_of_monthly_calendars
+    # )
     yearly_calendar_dict = yearly_calendar.__dict__()
     result = users.update_one(
         {"_id": user},
@@ -293,9 +295,9 @@ def get_recurring_events(user_id):
 
 def get_event(user_id, date, event_id):
     user_id = ObjectId(user_id)
-    year = int(date['year'])
-    month = int(date['month'])
-    day = int(date['day'])
+    year = date.year
+    month = date.month
+    day = date.day
     event_dict = users.aggregate([
         {"$match": {"_id": user_id}},
         {"$unwind": "$calendar"},
@@ -333,6 +335,17 @@ def update_event(user_id, event_id, date, updated_data):
             {"d.date": date['day']},
             {"event._id": event_id}
         ]
+    )
+    return result.modified_count > 0
+
+
+def update_recurring_event(user_id, event_id, updated_data):
+    user_id = ObjectId(user_id)
+    update_fields = {f"recurring_events.$[event].{key}": value for key, value in updated_data.items()}
+    result = users.update_one(
+        {"_id": ObjectId(user_id), "recurring_events._id": event_id},
+        {"$set": update_fields},
+        array_filters=[{"event._id": event_id}]
     )
     return result.modified_count > 0
 
@@ -412,9 +425,45 @@ def delete_task(user_id, task_id):
 def update_task(user_id, task_id, updated_data):
     user_id = ObjectId(user_id)
     update_fields = {f"task_list.$[task].{key}": value for key, value in updated_data.items()}
-    print(update_fields)
     result = users.update_one(
         {"_id": ObjectId(user_id), "task_list._id": task_id},
+        {"$set": update_fields},
+        array_filters=[{"task._id": task_id}]
+    )
+    return result.modified_count > 0
+
+
+def add_recurring_task(user_id, task):
+    user_id = ObjectId(user_id)
+    task_dict = task.__dict__()
+    result = users.update_one(
+        {"_id": user_id},
+        {
+            "$addToSet": {
+                "recurring_tasks": task_dict
+            }
+        }
+    )
+    return result.modified_count > 0
+
+
+def get_recurring_tasks(user_id):
+    user_id = ObjectId(user_id)
+    recurring_tasks = users.find_one(
+        {"_id": user_id},
+        {
+            "recurring_tasks": 1,
+            "_id": 0,
+        }
+    )
+    return recurring_tasks
+
+
+def update_recurring_task(user_id, task_id, updated_data):
+    user_id = ObjectId(user_id)
+    update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items()}
+    result = users.update_one(
+        {"_id": ObjectId(user_id), "recurring_tasks._id": task_id},
         {"$set": update_fields},
         array_filters=[{"task._id": task_id}]
     )
@@ -469,6 +518,18 @@ def decrement_event_count(user_id, year):
         }
     )
     return result.modified_count > 0
+
+
+def get_preferences(user_id):
+    user_id = ObjectId(user_id)
+    preferences = users.find_one(
+        {'_id': user_id},
+        {
+            'preferences': 1,
+            '_id': 0
+        }
+    )
+    return preferences['preferences']
 
 
 def update_preferences(user_id, preference):

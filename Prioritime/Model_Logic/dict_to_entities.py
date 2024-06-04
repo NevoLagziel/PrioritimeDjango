@@ -53,7 +53,7 @@ def dict_to_schedule(schedule_dict):
     event_list = []
     if event_list_dict:
         for event_dict in event_list_dict:
-            if event_dict['type'] == 'task':
+            if event_dict['item_type'] == 'task':
                 event = dict_to_task(event_dict)
             else:
                 event = dict_to_event(event_dict)
@@ -85,7 +85,7 @@ def dict_to_monthly_calendar(monthly_calendar_dict):
     return monthly_calendar
 
 
-def create_new_task(user_id, data):
+def create_new_task(user_id, data, session):
     # must have at least a name
     if 'name' not in data:
         return None
@@ -93,7 +93,7 @@ def create_new_task(user_id, data):
     name = data.get('name')  # string
     status = data.get('status')  # filled by default
     if len(data.keys()) == 2:
-        preference = mongoApi.find_preference(user_id, name)
+        preference = mongoApi.find_preference(user_id, name, session=session)
         if preference:
             preference = preference[name]
             # crating task by the data in the preferences

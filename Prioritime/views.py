@@ -29,22 +29,35 @@ def user_authorization(view_func):
     def wrapper(request, *args, **kwargs):
         if 'Authorization' not in request.headers:
             return JsonResponse({'error': 'Authorization header is missing'}, status=401)
-        jwt_token = request.headers.get('Authorization')
-        user_id = utils.verify_jwt_token(jwt_token)
-        if not user_id:
-            return JsonResponse({'error': 'error recovering jwt token'}, status=400)
 
-        if not mongoApi.user_exists(user_id=user_id):
-            return JsonResponse({'error': 'could not find user'}, status=400)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
 
-        confirmed = mongoApi.get_user_info(user_id=user_id, fields=['email_confirmed'])
-        if not confirmed:
-            return JsonResponse({'error': 'Problem loading data'})
+                jwt_token = request.headers.get('Authorization')
+                user_id = utils.verify_jwt_token(jwt_token)
+                if not user_id:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'error recovering jwt token'}, status=400)
 
-        if not confirmed['email_confirmed']:
-            return JsonResponse({'error': 'Email not confirmed'})
+                if not mongoApi.user_exists(user_id=user_id, session=session):
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'could not find user'}, status=400)
 
-        return view_func(request, user_id, *args, **kwargs)
+                confirmed = mongoApi.get_user_info(user_id=user_id, fields=['email_confirmed'], session=session)
+                if not confirmed:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Problem loading data'})
+
+                if not confirmed['email_confirmed']:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Email not confirmed'})
+
+                return view_func(request, user_id, *args, **kwargs)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return wrapper
 
@@ -57,45 +70,57 @@ def register(request):
         first_name = request.data.get('firstName')
         last_name = request.data.get('lastName')
         if email and password:
-            if mongoApi.user_exists(email=email):
-                return JsonResponse({'error': 'User with this email already exists'}, status=400)
+            with client.start_session() as session:
+                try:
+                    session.start_transaction()
+                    if mongoApi.user_exists(email=email, session=session):
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'User with this email already exists'}, status=400)
 
-            # Generate confirmation token
-            confirmation_token = str(uuid.uuid4())
+                    # Generate confirmation token
+                    confirmation_token = str(uuid.uuid4())
 
-            # hash the password
-            hashed_password = make_password(password)
+                    # hash the password
+                    hashed_password = make_password(password)
 
-            # Create user document
-            user_data = {
-                'firstName': first_name,
-                'lastName': last_name,
-                'email': email,
-                'password': hashed_password,
-                'confirmation_token': confirmation_token,
-                'email_confirmed': False,
-                'calendar': [],
-                'task_list': [],
-                'preferences': {
-                    'general': {
-                        'start_time': time(hour=8),
-                        'end_time': time(hour=20),
+                    # Create user document
+                    user_data = {
+                        'firstName': first_name,
+                        'lastName': last_name,
+                        'email': email,
+                        'password': hashed_password,
+                        'confirmation_token': confirmation_token,
+                        'email_confirmed': False,
+                        'calendar': [],
+                        'task_list': [],
+                        'recurring_events': [],
+                        'recurring_tasks': [],
+                        'preferences': {
+                            'general': {
+                                'start_time': time(hour=8).isoformat(),
+                                'end_time': time(hour=20).isoformat(),
+                            }
+                        },
                     }
-                },
-            }
 
-            # Insert user document into MongoDB
-            _id = mongoApi.create_user(user_data)
-            if not _id:
-                return JsonResponse({'error': 'Failed to create user'}, status=400)
+                    # Insert user document into MongoDB
+                    _id = mongoApi.create_user(user_data, session=session)
+                    if not _id:
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'Failed to create user'}, status=400)
 
-            # Generate JWT token
-            token = utils.generate_jwt_token(str(_id))
+                    # Generate JWT token
+                    token = utils.generate_jwt_token(str(_id))
 
-            # Send confirmation email
-            send_confirmation_email(email, confirmation_token)
+                    # Send confirmation email
+                    send_confirmation_email(email, confirmation_token)
 
-            return JsonResponse({'token': token})
+                    session.commit_transaction()
+                    return JsonResponse({'token': token})
+
+                except Exception as e:
+                    session.abort_transaction()
+                    return JsonResponse({'error': str(e)}, status=500)
         else:
             return JsonResponse({'error': 'Email and password are required'}, status=400)
 
@@ -116,44 +141,64 @@ def send_confirmation_email(email, confirmation_token):
 
 
 def confirm_email(request, token):
-    confirmed = mongoApi.does_email_confirmed(token)
-    if confirmed:
-        if confirmed['email_confirmed']:
-            return HttpResponse('Email already confirmed.')
+    with client.start_session() as session:
+        try:
+            session.start_transaction()
+            confirmed = mongoApi.does_email_confirmed(token, session)
+            if not confirmed:
+                return HttpResponse('Invalid confirmation token.')
 
-        result = mongoApi.confirm_email(token)
-        if result:
-            return HttpResponse('Your email has been confirmed successfully.')
+            if confirmed['email_confirmed']:
+                return HttpResponse('Email already confirmed.')
 
-        return HttpResponse('Could not confirm your email.\n'
-                            'Please try again later.')
-    else:
-        # Display an error message or redirect the user to an error page
-        return HttpResponse('Invalid confirmation token.')
+            result = mongoApi.confirm_email(token, session)
+            if result:
+                session.commit_transaction()
+                return HttpResponse('Your email has been confirmed successfully.')
+            else:
+                session.abort_transaction()
+                return HttpResponse('Could not confirm your email.\n'
+                                    'Please try again later.')
+
+        except Exception as e:
+            session.abort_transaction()
+            return JsonResponse({'error': str(e)}, status=500)
 
 
 @api_view(['POST'])
 def resend_confirmation_email(request):
     if request.method == 'POST':
         email = request.data.get('email')
-        if email:
-            if mongoApi.user_exists(email=email):
-                user_info = mongoApi.get_user_info(email=email, fields=['confirmation_token', 'email_confirmed'])
-                if user_info:
-                    email_confirmed = user_info['email_confirmed']
-                    if email_confirmed:
-                        return JsonResponse({'error': 'Email already confirmed'})
+        if email is None:
+            return JsonResponse({'error': 'Email required'})
 
-                    confirmation_token = user_info['confirmation_token']
-                    if confirmation_token:
-                        send_confirmation_email(email, confirmation_token)
-                        return JsonResponse({'message': 'Confirmation email sent successfully.'})
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                if mongoApi.user_exists(email=email, session=session):
+                    user_info = mongoApi.get_user_info(email=email, fields=['confirmation_token', 'email_confirmed'],
+                                                       session=session)
+                else:
+                    return JsonResponse({'error': 'User does not exist.'})
 
-                return JsonResponse({'error': 'Problem loading data'})
+                if not user_info:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Problem loading data'})
 
-            return JsonResponse({'error': 'User does not exist.'})
+                email_confirmed = user_info['email_confirmed']
+                if email_confirmed:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Email already confirmed'})
 
-        return JsonResponse({'error': 'Email required'})
+                confirmation_token = user_info['confirmation_token']
+                if confirmation_token:
+                    send_confirmation_email(email, confirmation_token)
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Confirmation email sent successfully.'})
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'})
 
@@ -163,21 +208,32 @@ def login(request):
     if request.method == 'POST':
         email = request.data.get('email')
         password = request.data.get('password')
-        if email and password:
-            user_info = mongoApi.get_user_info(email=email, fields=['password', 'email_confirmed', '_id'])
-            if user_info:
+        if not email or not password:
+            return JsonResponse({'error': 'Email and password are required'}, status=402)
+
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                user_info = mongoApi.get_user_info(email=email, fields=['password', 'email_confirmed', '_id'], session=session)
+                if not user_info:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'User does not exist'}, status=404)
+
                 if check_password(password, user_info['password']):
                     if user_info['email_confirmed']:
                         token = utils.generate_jwt_token(str(user_info['_id']))
+                        session.commit_transaction()
                         return JsonResponse({'token': token})
+                    else:
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'Email not confirmed'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Invalid email or password'}, status=400)
 
-                    return JsonResponse({'error': 'Email not confirmed'})
-
-                return JsonResponse({'error': 'Invalid email or password'}, status=400)
-
-            return JsonResponse({'error': 'User does not exist'}, status=404)
-
-        return JsonResponse({'error': 'Email and password are required'}, status=402)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -186,11 +242,21 @@ def login(request):
 @user_authorization
 def get_user_info(request, user_id):
     if request.method == 'GET':
-        result = mongoApi.get_user_info(user_id=user_id, fields=['first_name', 'last_name', 'email'])
-        if result:
-            return JsonResponse(result, status=200)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                result = mongoApi.get_user_info(user_id=user_id, fields=['firstName', 'lastName', 'email'],
+                                                session=session)
+                if result:
+                    session.commit_transaction()
+                    return JsonResponse(result, status=200)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Problem fetching user data'}, status=404)
 
-        return JsonResponse({'error': 'Problem fetching user data'}, status=404)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -199,45 +265,79 @@ def get_user_info(request, user_id):
 @user_authorization
 def delete_user(request, user_id):
     if request.method == 'DELETE':
-        result = mongoApi.delete_user(user_id)
-        if result:
-            return JsonResponse({'message': 'User deleted successfully'}, status=200)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                result = mongoApi.delete_user(user_id, session=session)
+                if result:
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'User deleted successfully'}, status=200)
+                else:
+                    session.abort_transaction()
+                return JsonResponse({'error': 'Problem deleting user'}, status=404)
 
-        return JsonResponse({'error': 'Problem deleting user'}, status=404)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
 @user_authorization
-def get_schedule(request, user_id):
+def get_schedule(request, user_id, date):
     if request.method == 'GET':
-        date = {'year': request.data.get('year'),
-                'month': request.data.get('month'),
-                'day': request.data.get('day')}
-        schedule = mongo_utils.get_schedule(user_id, date)
-        return JsonResponse(schedule.__dict__())
+        # date = {'year': request.data.get('year'),
+        #         'month': request.data.get('month'),
+        #         'day': request.data.get('day')}
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                date = datetime.fromisoformat(date)
+                schedule = mongo_utils.get_schedule(user_id, date, session=session)
+                if schedule:
+                    session.commit_transaction()
+                    return JsonResponse(schedule.__dict__())
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Could not find schedule'}, status=404)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
 
 
 @api_view(['POST'])
 @user_authorization
-def add_event(request, user_id):  # need to handle case that event is in more than one day
+def add_event(request, user_id):
     if request.method == 'POST':
-        event = dict_to_entities.create_new_event(request.data)
-        date = datetime.fromisoformat(event.start_time)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                event = dict_to_entities.create_new_event(request.data)
+                date = event.start_time
 
-        if event.frequency == "Once" or event.frequency is None:
-            if mongoApi.add_event(user_id, event, date):
-                return JsonResponse({'success': 'new event added successfully'})
+                if event.frequency == "Once" or event.frequency is None:
+                    if mongoApi.add_event(user_id, event, date, session=session):
+                        session.commit_transaction()
+                        return JsonResponse({'success': 'new event added successfully'})
+                    else:
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'problem adding new event to database'})
+                else:
+                    event.first_appearance = date
+                    if mongoApi.add_recurring_event(user_id, event, session=session):
+                        session.commit_transaction()
+                        return JsonResponse({'success': 'new event added successfully'})
+                    else:
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'problem adding new event to database'})
 
-        else:
-            event.first_appearance = date.isoformat()
-            if mongoApi.add_recurring_event(user_id, event):
-                return JsonResponse({'success': 'new event added successfully'})
-
-        return JsonResponse({'error': 'problem adding new event to database'})
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
 
@@ -246,19 +346,30 @@ def add_event(request, user_id):  # need to handle case that event is in more th
 @user_authorization
 def add_task(request, user_id):
     if request.method == 'POST':
-        task = dict_to_entities.create_new_task(user_id, request.data)
-        if not task:
-            return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
 
-        if task.frequency == "Once" or task.frequency is None:
-            result = mongoApi.add_task(user_id, task)
-        else:
-            result = mongoApi.add_recurring_task(user_id, task)
+                task = dict_to_entities.create_new_task(user_id, request.data, session=session)
+                if not task:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
 
-        if result:
-            return JsonResponse({'message': 'Task created successfully'})
+                if task.frequency == "Once" or task.frequency is None:
+                    result = mongoApi.add_task(user_id, task, session=session)
+                else:
+                    result = mongoApi.add_recurring_task(user_id, task, session=session)
 
-        return JsonResponse({'error': 'task could not be added'}, status=400)
+                if result:
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Task created successfully'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'task could not be added'}, status=400)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=405)
 
@@ -267,32 +378,48 @@ def add_task(request, user_id):
 @user_authorization
 def add_task_and_automate(request, user_id):
     if request.method == 'POST':
-        task = dict_to_entities.create_new_task(user_id, request.data)
-        if not task:
-            return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
 
-        if task.frequency == "Once" or task.frequency is None:
-            result = mongoApi.add_task(user_id, task)
-            if result:
-                end_time = task.deadline if task.deadline is not None else (datetime.today() + timedelta(days=7))
-                schedule_single_task(user_id, task, datetime.today(), end_time)
-            else:
-                return JsonResponse({'error': 'failed to add new task'}, status=400)
-        else:
-            current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
-            deadline = mongo_utils.find_deadline_for_next_recurring_task(task, current_date)
-            task_instance = task.generate_recurring_instance(deadline)
-            task.previous_done = deadline
-            result = mongoApi.add_recurring_task(user_id, task)
-            if result:
-                schedule_single_task(user_id, task_instance, datetime.today(), deadline)
-            else:
-                return JsonResponse({'error': 'failed to add new task'}, status=400)
+                task = dict_to_entities.create_new_task(user_id, request.data, session=session)
+                if not task:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
 
-        if result:
-            return JsonResponse({'message': 'Task created successfully'})
+                if task.frequency == "Once" or task.frequency is None:
+                    result = mongoApi.add_task(user_id, task, session=session)
+                    if result:
+                        end_time = task.deadline if task.deadline is not None else (datetime.today() + timedelta(days=7))
+                        if schedule_single_task(user_id, task, datetime.today(), end_time, session=session):
+                            session.commit_transaction()
+                            return JsonResponse({'message': 'Task created successfully and scheduled!'}, status=201)
+                        else:
+                            session.abort_transaction()
+                            return JsonResponse({'error': 'task could not be scheduled'}, status=400)
+                    else:
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'failed to add new task'}, status=400)
+                else:
+                    current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
+                    deadline = mongo_utils.find_deadline_for_next_recurring_task(task, current_date)
+                    task_instance = task.generate_recurring_instance(deadline)
+                    task.previous_done = deadline
+                    result = mongoApi.add_recurring_task(user_id, task, session=session)
+                    if result:
+                        if schedule_single_task(user_id, task_instance, datetime.today(), deadline, session=session):
+                            session.commit_transaction()
+                            return JsonResponse({'message': 'Task created successfully and scheduled!'}, status=201)
+                        else:
+                            session.abort_transaction()
+                            return JsonResponse({'error': 'task could not be scheduled'}, status=400)
+                    else:
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'failed to add new task'}, status=400)
 
-        return JsonResponse({'error': 'task could not be added'}, status=400)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=405)
 
@@ -305,12 +432,21 @@ def get_event(request, user_id, date):
         if not event_id:
             return JsonResponse({'error': 'missing data'}, status=400)
 
-        date = datetime.fromisoformat(date)
-        event = mongoApi.get_event(user_id, date, event_id)
-        if event:
-            return JsonResponse(event)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                date = datetime.fromisoformat(date)
+                event = mongoApi.get_event(user_id, date, event_id, session=session)
+                if event:
+                    session.commit_transaction()
+                    return JsonResponse(event)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'event not found'}, status=404)
 
-        return JsonResponse({'error': 'event not found'}, status=404)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=405)
 
@@ -322,11 +458,20 @@ def get_monthly_calendar(request, user_id):
         date = {'year': request.data.get('year'),
                 'month': request.data.get('month')}
 
-        monthly_calendar = mongo_utils.get_monthly_calendar(user_id, date)
-        if monthly_calendar:
-            return JsonResponse(monthly_calendar.__dict__())
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                monthly_calendar = mongo_utils.get_monthly_calendar(user_id, date, session=session)
+                if monthly_calendar:
+                    session.commit_transaction()
+                    return JsonResponse(monthly_calendar.__dict__())
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'monthly calendar not found'}, status=404)
 
-        return JsonResponse({'error': 'monthly calendar empty'}, status=400)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
 
@@ -336,32 +481,51 @@ def get_monthly_calendar(request, user_id):
 def edit_event(request, user_id, date):
     if request.method == 'PUT':
         event_id = request.data.get('_id')
-        new_date = datetime.fromisoformat(request.data.get('start_time'))
-        old_date = datetime.fromisoformat(date)
+        if not event_id:
+            return JsonResponse({'error': 'missing data'}, status=400)
 
-        if mongo_utils.update_event(user_id, old_date, new_date, event_id, request.data):
-            return JsonResponse({'message': 'Event updated successfully'})
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                new_date = datetime.fromisoformat(request.data.get('start_time'))
+                old_date = datetime.fromisoformat(date)
 
-        return JsonResponse({'error': 'Event could not be updated or does not exist'}, status=400)
+                if mongo_utils.update_event(user_id, old_date, new_date, event_id, request.data, session=session):
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Event updated successfully'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Event could not be updated or does not exist'}, status=400)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
+
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
 @api_view(['DELETE'])
 @user_authorization
-def delete_event(request, user_id):
+def delete_event(request, user_id, date):
     if request.method == 'DELETE':
         event_id = request.data.get('_id')
-        date = {'year': request.data.get('year'),
-                'month': request.data.get('month'),
-                'day': request.data.get('day')}
 
         if not event_id or not date:
             return JsonResponse({'error': 'Missing required parameters'}, status=400)
 
-        if mongoApi.delete_event(user_id, date, event_id):
-            return JsonResponse({'message': 'Event deleted successfully'})
-        else:
-            return JsonResponse({'error': 'Event not found'}, status=404)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                if mongoApi.delete_event(user_id, date, event_id, session=session):
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Event deleted successfully'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Event not found'}, status=404)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -375,11 +539,20 @@ def delete_task(request, user_id):
         if not task_id:
             return JsonResponse({'error': 'Missing required parameter: _id'}, status=400)
 
-        success = mongoApi.delete_task(user_id, task_id)
-        if success:
-            return JsonResponse({'message': 'Task deleted successfully'})
-        else:
-            return JsonResponse({'error': 'Task not found'}, status=404)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                success = mongoApi.delete_task(user_id, task_id, session=session)
+                if success:
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Task deleted successfully'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Task not found'}, status=404)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -391,13 +564,24 @@ def edit_task(request, user_id):
         # Extract the data from the request
         task_id = request.data.get('_id')
         updated_data = request.data
+        if not task_id:
+            return JsonResponse({'error': 'Missing required parameter: _id'}, status=400)
 
-        result = mongoApi.update_task(user_id, task_id, updated_data)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                result = mongoApi.update_task(user_id, task_id, updated_data, session=session)
+                if result:
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Task updated successfully'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Task could not be updated or does not exist'}, status=400)
 
-        if result:
-            return JsonResponse({'message': 'Task updated successfully'})
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
-        return JsonResponse({'error': 'Task could not be updated or does not exist'}, status=400)
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
@@ -405,12 +589,22 @@ def edit_task(request, user_id):
 @user_authorization
 def get_task_list(request, user_id):
     if request.method == 'GET':
-        date = request.data.get('date')
-        task_list = mongo_utils.get_task_list(user_id, date)
-        if task_list:
-            return JsonResponse(task_list)
+        date = request.data.get('date')  # could be None
 
-        return JsonResponse({'error': 'Problem loading data'}, status=400)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                task_list = mongo_utils.get_task_list(user_id, date, session=session)
+                if task_list:
+                    session.commit_transaction()
+                    return JsonResponse(task_list)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Problem loading data'}, status=400)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -419,8 +613,20 @@ def get_task_list(request, user_id):
 @user_authorization
 def get_preferences(request, user_id):
     if request.method == 'GET':
-        preferences = mongoApi.get_preferences(user_id)
-        return JsonResponse(preferences)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                preferences = mongoApi.get_preferences(user_id, session=session)
+                if preferences:
+                    session.commit_transaction()
+                    return JsonResponse(preferences)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Problem loading data'}, status=400)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -428,13 +634,22 @@ def get_preferences(request, user_id):
 @api_view(['PUT'])
 @user_authorization
 def update_preferences(request, user_id):
-    if request.method == 'POST':
-        preference = request.data.get('preferences')
-        result = mongoApi.update_preferences(user_id, preference)
-        if result:
-            return JsonResponse({'message': 'Preferences updated successfully'})
+    if request.method == 'PUT':
+        preference = request.data.get('preference')
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                result = mongoApi.update_preferences(user_id, preference, session=session)
+                if result:
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Preferences updated successfully'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Problem updating preference'}, status=400)
 
-        return JsonResponse({'error': 'Problem updating preference'}, status=400)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -443,17 +658,24 @@ def update_preferences(request, user_id):
 @user_authorization
 def set_day_off(request, user_id):
     if request.method == 'PUT':
-        # try:
         day_off = request.data.get('day_off')
         date = {'year': request.data.get('year'),
                 'month': request.data.get('month'),
                 'day': request.data.get('day')}
-        # except Exception as e:
-        #     return JsonResponse({e}, status=400)
-        if mongoApi.update_day_off(user_id, date, day_off):
-            return JsonResponse({'message': 'Successfully updated'})
 
-        return JsonResponse({'error': 'problem updating day off'}, status=400)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                if mongoApi.update_day_off(user_id, date, day_off, session=session):
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Successfully updated'})
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'problem updating day off'}, status=400)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -469,11 +691,21 @@ def automatic_scheduling(request, user_id):
         if not start_date or not end_date or not tasks_id_list:
             return JsonResponse({'error': 'Missing parameters'}, status=400)
 
-        start_date = datetime.fromisoformat(start_date)
-        end_date = datetime.fromisoformat(end_date)
-        task_list, unscheduled_activities = schedule_tasks(user_id, tasks_id_list, start_date, end_date)
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                start_date = datetime.fromisoformat(start_date)
+                end_date = datetime.fromisoformat(end_date)
+                if schedule_tasks(user_id, tasks_id_list, start_date, end_date, session=session):
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Tasks scheduled successfully'}, status=200)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Could not schedule tasks!'}, status=500)
 
-        return JsonResponse(task_list)
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -482,18 +714,20 @@ def automatic_scheduling(request, user_id):
 @user_authorization
 def re_automate(request, user_id):
     if request.method == 'POST':
+        date = {'year': request.data.get('year'),
+                'month': request.data.get('month'),
+                'day': request.data.get('day')}
+
         with client.start_session() as session:
             try:
                 session.start_transaction()
+                if re_schedule_tasks(user_id, date, session=session):
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'Tasks scheduled successfully'}, status=200)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Could not schedule tasks!'}, status=500)
 
-                date = {'year': request.data.get('year'),
-                        'month': request.data.get('month'),
-                        'day': request.data.get('day')}
-
-                task_list, unscheduled_activities = re_schedule_tasks(user_id, date)  # add here session
-
-                session.commit_transaction()
-                return JsonResponse(task_list)
             except Exception as e:
                 session.abort_transaction()
                 return JsonResponse({'error': str(e)}, status=500)

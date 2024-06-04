@@ -37,13 +37,13 @@ class CalendarItem:
 
 
 class Event(CalendarItem):
-    def __init__(self, start_time, end_time, sub_event=None, first_appearance=None, **kwargs):
+    def __init__(self, start_time, end_time, sub_event=None, first_appearance=None, item_type='event', **kwargs):
         super().__init__(**kwargs)
         self.first_appearance = datetime.fromisoformat(first_appearance) if first_appearance is not None else None
         self.start_time = datetime.fromisoformat(start_time)
         self.end_time = datetime.fromisoformat(end_time)
         self.sub_event = sub_event
-        self.type = 'event'
+        self.item_type = item_type
 
     def __dict__(self):
         event_dict = super().__dict__()
@@ -51,13 +51,13 @@ class Event(CalendarItem):
         event_dict['start_time'] = self.start_time.isoformat()
         event_dict['end_time'] = self.end_time.isoformat()
         event_dict['sub_event'] = self.sub_event
-        event_dict['type'] = self.type
+        event_dict['item_type'] = self.item_type
         return event_dict
 
 
 class Task(CalendarItem):
     def __init__(self, priority=None, deadline=None, status=None, previous_done=None, start_time=None, end_time=None,
-                 **kwargs):
+                 item_type='task', **kwargs):
         super().__init__(**kwargs)
         self.priority = priority
         self.deadline = deadline if deadline is None else datetime.fromisoformat(deadline)
@@ -65,7 +65,7 @@ class Task(CalendarItem):
         self.previous_done = previous_done if previous_done is None else datetime.fromisoformat(previous_done)
         self.start_time = start_time if start_time is None else datetime.fromisoformat(start_time)
         self.end_time = end_time if end_time is None else datetime.fromisoformat(end_time)
-        self.type = 'task'
+        self.item_type = item_type
 
     def task_completed(self):
         self.status = 'done'
@@ -78,7 +78,7 @@ class Task(CalendarItem):
         task_dict['previous_done'] = self.previous_done if self.previous_done is None else self.previous_done.isoformat()
         task_dict['start_time'] = self.start_time if self.start_time is None else self.start_time.isoformat()
         task_dict['end_time'] = self.end_time if self.end_time is None else self.end_time.isoformat()
-        task_dict['type'] = self.type
+        task_dict['item_type'] = self.item_type
         return task_dict
 
     def schedule(self, start_time=None, end_time=None):
@@ -201,7 +201,7 @@ class Schedule:
             end_time = end_time.replace(hour=e_time.hour, minute=e_time.minute, second=e_time.second)
 
         for event in self.event_list:
-            if event.start_time.time() > start_time:
+            if event.start_time > start_time:
                 free_times.append((start_time, event.start_time))
                 start_time = event.end_time
 

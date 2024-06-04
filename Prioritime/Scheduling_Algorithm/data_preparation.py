@@ -22,15 +22,17 @@ class DayPart(Enum):
     Evening = (time(hour=16), time(hour=20))
 
 
-def data_preparation(user_id, task_list, begin_date, end_date):
+def data_preparation(user_id, task_list, begin_date, end_date, session):
     activities = []
     all_free_time_blocks = []
     current_date = begin_date
-    general_preferences = mongoApi.find_preference(user_id, 'general')
-    general_preferences = general_preferences['general']
+    preferences = mongoApi.find_preference(user_id, 'general', session=session)
+    general_preferences = preferences['general']
     while current_date <= end_date:
         date = {'year': current_date.year, 'month': current_date.month, 'day': current_date.day}
-        schedule = mongo_utils.get_schedule(user_id, date)
+        schedule = mongo_utils.get_schedule(user_id, current_date, session=session)
+        if schedule is None:
+            return None
 
         if not schedule.day_off:
             all_free_time_blocks.append(schedule.free_time_init(
@@ -43,7 +45,7 @@ def data_preparation(user_id, task_list, begin_date, end_date):
 
     for task in task_list:
         if task.duration:
-            preference_dict = mongoApi.find_preference(user_id, task.name)
+            preference_dict = mongoApi.find_preference(user_id, task.name, session=session)
             preferred_days = None
             preferred_times = None
             if preference_dict:

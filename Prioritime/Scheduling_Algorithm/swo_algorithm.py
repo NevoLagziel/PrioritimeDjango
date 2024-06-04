@@ -152,7 +152,9 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
         filter_free_time_blocks(act)
 
     activity_utilities = {
-        activity.id: utility(activity, prev_start=prev_schedule[activity.id].start_time if prev_schedule is not None else None) for
+        activity.id: utility(activity,
+                             prev_start=prev_schedule[activity.id].start_time if prev_schedule is not None else None)
+        for
         activity in activities}
 
     # promotion_dict = dict.fromkeys(activity.id for activity in activities)
@@ -168,7 +170,9 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 
         # promoting the activities that was marked for promotion at the last iteration
         # for promotion_id, promote_before_id in promotion_dict.items():
+
         promotions.sort(key=sort_promotions)
+
         for promotion_id, (promote_before_id, util) in promotions:
             if promote_before_id:
                 index = next((i for i, act in enumerate(base_pq) if act.id == promotion_id), None)
@@ -232,156 +236,65 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
     return best_plan, unscheduled_activities
 
 
-# Example usage
-from Prioritime.Model_Logic.calendar_objects import Task
-from Prioritime.mongoDB import mongoApi
-from datetime import time
-from Prioritime.Scheduling_Algorithm.data_preparation import data_preparation, arrange_prev_schedule
-
-
-user_id = '663cafd680b6dde278303f1d'
-general = {'name': 'general', 'start_time': time(hour=8).isoformat(), 'end_time': time(hour=20).isoformat()}
-mongoApi.update_preferences(user_id, general)
-
-preference = {
-    'name': 'Task_2',
-    'possible_days': [0, 1, 2, 3],
-    'day_part': {'morning': False, 'noon': True, 'evening': True}
-}
-
-mongoApi.update_preferences(user_id, preference)
-
-preference = {
-    'name': 'Task_5',
-    'possible_days': [0, 1, 3],
-    'day_part': {'morning': True, 'noon': False, 'evening': False}
-}
-
-mongoApi.update_preferences(user_id, preference)
-
-task_list = [
-    Task(_id='123a4223sd', name='Task_1', deadline=datetime(2024, 12, 10).isoformat(), duration=40,
-         start_time=datetime(2024, 6, 1, 14, 40).isoformat(), end_time=datetime(2024, 6, 1, 15, 20).isoformat()),
-
-    Task(_id='123as332rd', name='Task_2', deadline=datetime(2024, 8, 10).isoformat(), duration=20,
-         start_time=datetime(2024, 6, 3, 16, 0).isoformat(), end_time=datetime(2024, 6, 3, 16, 20).isoformat()),
-
-    Task(_id='123fw3a4sd', name='Task_3', deadline=datetime(2024, 7, 10).isoformat(), duration=400,
-         start_time=datetime(2024, 6, 1, 8, 0).isoformat(), end_time=datetime(2024, 6, 1, 14, 40).isoformat()),
-
-    Task(_id='123asf423d', name='Task_4', deadline=datetime(2024, 6, 10).isoformat(), duration=30,
-         start_time=datetime(2024, 6, 9, 8, 0).isoformat(), end_time=datetime(2024, 6, 9, 8, 30).isoformat()),
-
-    Task(_id='123asf234d', name='Task_5', deadline=datetime(2024, 11, 10).isoformat(), duration=70,
-         start_time=datetime(2024, 6, 3, 8, 0).isoformat(), end_time=datetime(2024, 6, 3, 9, 10).isoformat()),
-
-    Task(_id='123a3424sd', name='Task_6', deadline=datetime(2024, 12, 10).isoformat(), duration=90,
-         start_time=datetime(2024, 6, 1, 15, 20).isoformat(), end_time=datetime(2024, 6, 1, 16, 50).isoformat())
-]
-activities = data_preparation(user_id, task_list, datetime(year=2024, month=6, day=1),
-                              datetime(year=2024, month=6, day=30))
-
-prev_schedule = arrange_prev_schedule(task_list)
-
-activities = data_preparation(user_id, task_list, datetime(year=2024, month=6, day=1),
-                              datetime(year=2024, month=6, day=30))
-
-# activities = [
-#     Activity('1', 60, [(datetime(2024, 5, 25, 8), datetime(2024, 5, 25, 20))], deadline=datetime(2024, 5, 25, 19),
-#              preferred_days=[0, 1, 2, 3, 4], preferred_times=[(datetime(2024, 5, 25, 13), datetime(2024, 5, 25, 17))]),
-#     Activity('2', 30, [(datetime(2024, 5, 25, 8), datetime(2024, 5, 25, 20))], preferred_days=[0, 1, 2, 3, 4],
-#              preferred_times=[(datetime(2024, 5, 25, 14), datetime(2024, 5, 25, 15))]),
-#     Activity('3', 30, [(datetime(2024, 5, 25, 8), datetime(2024, 5, 25, 20))], preferred_days=[0, 1, 2, 3, 4],
-#              preferred_times=[(datetime(2024, 5, 25, 14), datetime(2024, 5, 25, 15))]),
-#     Activity('4', 30, [(datetime(2024, 5, 25, 8), datetime(2024, 5, 25, 14, 30))], preferred_days=[0, 1, 2, 3, 4],
-#              preferred_times=[(datetime(2024, 5, 25, 14), datetime(2024, 5, 25, 15))]),
-#     Activity('5', 30, [(datetime(2024, 5, 25, 8), datetime(2024, 5, 25, 14, 30))], preferred_days=[0, 1, 2, 3, 4],
-#              preferred_times=[(datetime(2024, 5, 25, 14), datetime(2024, 5, 25, 15))]),
-#     Activity('6', 30, [(datetime(2024, 5, 25, 14), datetime(2024, 5, 25, 14, 30))], preferred_days=[0, 1, 2, 3, 4]),
-#     Activity('7', 60, [(datetime(2024, 5, 25, 8), datetime(2024, 5, 25, 20))], deadline=datetime(2024, 5, 25, 12),
-#              preferred_days=[0, 1, 2, 3, 4], preferred_times=[(datetime(2024, 5, 25, 13), datetime(2024, 5, 25, 17))]),
-# ]
-
-final_plan, unschedule_tasks = schedule_activities(activities, prev_schedule=prev_schedule)
-print(f"plan: {final_plan} , unscheduled activities: {unschedule_tasks}")
-
-#
-#
-# class Activity:
-#     def __init__(self, task_id: str, duration, temporal_domain: List[Tuple[int, int]]):
-#         self.task_id = task_id
-#         self.duration = duration
-#         self.temporal_domain = temporal_domain
-#         self.schedule = None  # List of tuples (start_time, duration, location)
-#         self.utility = 0  # Utility of scheduling this activity
-#
-#     def __repr__(self):
-#         return f"Activity({self.name})"
-#
-#
-# def difficulty_metric(activity: Activity) -> float:
-#     # Example of calculating a simple difficulty metric based on duration and temporal domain
-#     total_domain_time = sum(end - start for start, end in activity.temporal_domain)
-#     return activity.duration_range[1] / total_domain_time
-#
-#
-# def calculate_utility(schedule: List[Activity]) -> float:
-#     # Simplified utility calculation
-#     return sum(act.duration_range[1] for act in schedule)  # Just a placeholder
-#
-#
-# def greedy_schedule_activities(activities: List[Activity]) -> List[Activity]:
-#     scheduled_activities = []
-#     for activity in activities:
-#         for time_block_start, time_block_end in activity.temporal_domain:
-#             if time_block_end - time_block_start >= activity.duration:
-#                 for scheduled_activity in scheduled_activities:
-#                     scheduled_start_time, scheduled_duration = scheduled_activity.schedule
-#                     if scheduled_start_time + scheduled_duration > time_block_start and scheduled_start_time < time_block_start + activity.duration:
-#                         if scheduled_start_time + scheduled_duration + activity.duration > time_block_end:
-#                             # false
-#                 #
-#                 activity.schedule = (time_block_start, activity.duration)
-#                 scheduled_activities.append(activity)
-#                 break
-#     return scheduled_activities
-#
-#
-# def analyze_and_reorder(schedule: List[Activity], priority_queue: List[Activity]) -> List[Activity]:
-#     # Placeholder for analyze and reorder logic
-#     # For simplicity, reorder based on the calculated utility (reverse the queue)
-#     return sorted(priority_queue, key=lambda x: x.utility, reverse=True)
-#
-#
-# def squeaky_wheel_optimization(activities: List[Activity], max_iterations: int = 100) -> List[Activity]:
-#     priority_queue = sorted(activities, key=difficulty_metric)
-#     best_schedule = []
-#     best_utility = float('-inf')
-#
-#     for iteration in range(max_iterations):
-#         schedule = greedy_schedule_activities(priority_queue)
-#         current_utility = calculate_utility(schedule)
-#
-#         if current_utility > best_utility:
-#             best_utility = current_utility
-#             best_schedule = schedule
-#
-#         priority_queue = analyze_and_reorder(schedule, priority_queue)
-#
-#         # Exit condition based on utility improvements
-#         if iteration > 10 and current_utility == best_utility:
-#             break
-#
-#     return best_schedule
-#
-#
 # # Example usage
-# activities = [
-#     Activity("A1", (2, 4), [(0, 10)], 0.5, ["L1"], True, 1, 2, 1, 5),
-#     Activity("A2", (1, 3), [(5, 15)], 0.7, ["L2"], False, 1, 1, 0, 0),
-#     # Add more activities as needed
-# ]
+# from Prioritime.Model_Logic.calendar_objects import Task
+# from Prioritime.mongoDB import mongoApi
+# from datetime import time
+# from Prioritime.Scheduling_Algorithm.data_preparation import data_preparation, arrange_prev_schedule
+# from db_connection import client
 #
-# best_schedule = squeaky_wheel_optimization(activities)
-# for act in best_schedule:
-#     print(f"Activity {act.name} scheduled at {act.schedule}")
+# user_id = '663cafd680b6dde278303f1d'
+# general = {'name': 'general', 'start_time': time(hour=8).isoformat(), 'end_time': time(hour=20).isoformat()}
+# with client.start_session() as session:
+#     try:
+#         session.start_transaction()
+#         mongoApi.update_preferences(user_id, general, session=session)
+#
+#         preference = {
+#             'name': 'Task_2',
+#             'possible_days': [0, 1, 2, 3],
+#             'day_part': {'morning': False, 'noon': True, 'evening': True}
+#         }
+#
+#         mongoApi.update_preferences(user_id, preference, session=session)
+#
+#         preference = {
+#             'name': 'Task_5',
+#             'possible_days': [0, 1, 3],
+#             'day_part': {'morning': True, 'noon': False, 'evening': False}
+#         }
+#
+#         mongoApi.update_preferences(user_id, preference, session=session)
+#
+#         task_list = [
+#             Task(_id='123a4223sd', name='Task_1', deadline=datetime(2024, 12, 10).isoformat(), duration=40,
+#                  start_time=datetime(2024, 6, 1, 14, 40).isoformat(),
+#                  end_time=datetime(2024, 6, 1, 15, 20).isoformat()),
+#
+#             Task(_id='123as332rd', name='Task_2', deadline=datetime(2024, 8, 10).isoformat(), duration=20,
+#                  start_time=datetime(2024, 6, 3, 16, 0).isoformat(), end_time=datetime(2024, 6, 3, 16, 20).isoformat()),
+#
+#             Task(_id='123fw3a4sd', name='Task_3', deadline=datetime(2024, 7, 10).isoformat(), duration=400,
+#                  start_time=datetime(2024, 6, 1, 8, 0).isoformat(), end_time=datetime(2024, 6, 1, 14, 40).isoformat()),
+#
+#             Task(_id='123asf423d', name='Task_4', deadline=datetime(2024, 6, 10).isoformat(), duration=30,
+#                  start_time=datetime(2024, 6, 9, 8, 0).isoformat(), end_time=datetime(2024, 6, 9, 8, 30).isoformat()),
+#
+#             Task(_id='123asf234d', name='Task_5', deadline=datetime(2024, 11, 10).isoformat(), duration=70,
+#                  start_time=datetime(2024, 6, 3, 8, 0).isoformat(), end_time=datetime(2024, 6, 3, 9, 10).isoformat()),
+#
+#             Task(_id='123a3424sd', name='Task_6', deadline=datetime(2024, 12, 10).isoformat(), duration=90,
+#                  start_time=datetime(2024, 6, 1, 15, 20).isoformat(), end_time=datetime(2024, 6, 1, 16, 50).isoformat())
+#         ]
+#         activities = data_preparation(user_id, task_list, datetime(year=2024, month=6, day=1),
+#                                       datetime(year=2024, month=6, day=30), session=session)
+#
+#         prev_schedule = arrange_prev_schedule(task_list)
+#
+#     except Exception as e:
+#         session.abort_transaction()
+#         print(e)
+#
+# final_plan, unschedule_tasks = schedule_activities(activities, prev_schedule=prev_schedule)
+# print(f"plan: {final_plan} , unscheduled activities: {unschedule_tasks}")
+

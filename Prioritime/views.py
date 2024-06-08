@@ -47,7 +47,7 @@ def user_authorization(view_func):
                 confirmed = mongoApi.get_user_info(user_id=user_id, fields=['email_confirmed'], session=session)
                 if not confirmed:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'Problem loading data'})
+                    return JsonResponse({'error': 'Problem loading data'}, status=402)
 
                 if not confirmed['email_confirmed']:
                     session.abort_transaction()

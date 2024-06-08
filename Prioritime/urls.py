@@ -2,7 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('api/', views.index),
+    path('', views.index),
     path('api/register', views.register, name='register'),  # POST
     path('api/login', views.login, name='login'),  # POST
     path('api/confirm-email/<str:token>/', views.confirm_email, name='confirm_email'),

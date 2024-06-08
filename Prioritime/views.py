@@ -230,7 +230,7 @@ def login(request):
                         return JsonResponse({'error': 'Email not confirmed'})
                 else:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'Invalid email or password'}, status=400)
+                    return JsonResponse({'error': 'Invalid email or password'}, status=404)
 
             except Exception as e:
                 session.abort_transaction()

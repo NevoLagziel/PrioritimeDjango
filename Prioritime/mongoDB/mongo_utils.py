@@ -41,8 +41,8 @@ def create_new_schedule(year, month, day):
 
 
 def get_monthly_calendar(user_id, date, session):
-    month = int(date['month'])
-    year = int(date['year'])
+    month = date.month
+    year = date.year
     monthly_calendar_dict = mongoApi.get_monthly_calendar(user_id, date, session=session)
     if monthly_calendar_dict:
         monthly_calendar = dict_to_entities.dict_to_monthly_calendar(monthly_calendar_dict)
@@ -58,15 +58,15 @@ def get_monthly_calendar(user_id, date, session):
     if not recurring_events and not task_list_dict:
         return monthly_calendar
 
-    tasks = dict_to_entities.dict_to_task_list(task_list_dict) if task_list_dict else None
+    # tasks = dict_to_entities.dict_to_task_list(task_list_dict) if task_list_dict else None
     for schedule in monthly_calendar.list_of_schedules:
         datetime_date = datetime(year=year, month=month, day=schedule.date)
         if recurring_events:
             insert_recurring_events_to_schedule(recurring_events, schedule, datetime_date)
 
         # remove that if updating the tasks to be in a schedule
-        if tasks:
-            insert_scheduled_tasks_to_schedule(tasks, schedule, datetime_date)
+        # if tasks:
+        #     insert_scheduled_tasks_to_schedule(tasks, schedule, datetime_date)
 
     return monthly_calendar
 
@@ -88,13 +88,13 @@ def get_schedule(user_id, date, session):
     insert_recurring_events_to_schedule(recurring_events, schedule, date)
 
     # remove that if updating the tasks to be in a schedule
-    task_list_dict = get_task_list(user_id, session=session)
-    if task_list_dict is None:
-        return None
-
-    if task_list_dict:
-        tasks = dict_to_entities.dict_to_task_list(task_list_dict['task_list'])
-        insert_scheduled_tasks_to_schedule(tasks, schedule, date)
+    # task_list_dict = get_task_list(user_id, session=session)
+    # if task_list_dict is None:
+    #     return None
+    #
+    # if task_list_dict:
+    #     tasks = dict_to_entities.dict_to_task_list(task_list_dict['task_list'])
+    #     insert_scheduled_tasks_to_schedule(tasks, schedule, date)
 
     return schedule
 
@@ -142,9 +142,32 @@ def is_recurring_on_date(recurring_event, target_date):
     return False
 
 
+# def update_event_2(user_id, old_date, new_date, event_id, updated_data, session):
+#     item_type = updated_data.get('item_type')
+#     if item_type == 'recurring event':
+#         new_updated_data = updated_data.copy()
+#         if old_date.date() != new_date.date():
+#             new_updated_data['first_appearance'] = new_date.isoformat()
+#
+#         if mongoApi.update_recurring_event(user_id, event_id, new_updated_data, session=session):
+#             return True
+#
+#     else:
+#         if old_date.date() == new_date.date():
+#             if mongoApi.update_event(user_id, event_id, old_date, updated_data, session=session):
+#                 return True
+#         else:
+#             updated_event = dict_to_entities.create_new_event(updated_data)
+#             if mongoApi.delete_event(user_id, old_date, event_id, session=session):
+#                 if mongoApi.add_event(user_id, updated_event, new_date, session=session):
+#                     return True
+#
+#     return False
+
+
 def update_event(user_id, old_date, new_date, event_id, updated_data, session):
-    frequency = updated_data.get('frequency')
-    if frequency is not None and frequency != 'Once':
+    item_type = updated_data.get('item_type')
+    if item_type == 'recurring event':
         new_updated_data = updated_data.copy()
         if old_date.date() != new_date.date():
             new_updated_data['first_appearance'] = new_date.isoformat()
@@ -152,40 +175,20 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
         if mongoApi.update_recurring_event(user_id, event_id, new_updated_data, session=session):
             return True
 
-    elif old_date.date() == new_date.date():
-        if mongoApi.update_event(user_id, event_id, old_date, updated_data, session=session):
-            return True
     else:
-        updated_event = dict_to_entities.create_new_event(updated_data)
-        if mongoApi.delete_event(user_id, old_date, event_id, session=session):
-            if mongoApi.add_event(user_id, updated_event, new_date, session=session):
+        if old_date.date() == new_date.date():
+            if mongoApi.update_event(user_id, event_id, old_date, updated_data, session=session):
                 return True
 
-    return False
+        else:
+            event = mongoApi.get_event(user_id, old_date, event_id, session=session)
+            if event is None:
+                return False
 
-
-def update_event_2(user_id, old_date, new_date, event_id, updated_data, session):
-    frequency = updated_data.get('frequency')
-    if frequency is not None and frequency != 'Once':
-        new_updated_data = updated_data.copy()
-        if old_date.date() != new_date.date():
-            new_updated_data['first_appearance'] = new_date.isoformat()
-
-        if mongoApi.update_recurring_event(user_id, event_id, new_updated_data, session=session):
-            return True
-
-    elif old_date.date() == new_date.date():
-        if mongoApi.update_event(user_id, event_id, old_date, updated_data, session=session):
-            return True
-    else:
-        event = mongoApi.get_event(user_id, old_date, event_id, session=session)
-        if event is None:
-            return False
-
-        event.update(updated_data)
-        if mongoApi.delete_event(user_id, old_date, event_id, session=session):
-            if mongoApi.add_event(user_id, event, new_date, session=session):
-                return True
+            event.update(updated_data)
+            if mongoApi.delete_event(user_id, old_date, event_id, session=session):
+                if mongoApi.add_event(user_id, event, new_date, session=session):
+                    return True
 
     return False
 
@@ -202,13 +205,16 @@ def get_task_list(user_id, deadline=None, session=None):
         return task_list_dict
 
     task_list = dict_to_entities.dict_to_task_list(task_list_dict['task_list'])
-    deadline = date_lib.fromisoformat(deadline)
     filtered_task_list = calendar_objects.Tasks(task_list.get_list_by_deadline(deadline))
     return filtered_task_list.__dict__()
 
 
 def insert_recurring_tasks_to_task_list(user_id, session):
     recurring_tasks_dict = mongoApi.get_recurring_tasks(user_id, session=session)
+    if recurring_tasks_dict is None:
+        return False
+
+    recurring_tasks_dict = recurring_tasks_dict['recurring_tasks']
     if not recurring_tasks_dict:
         return True
 

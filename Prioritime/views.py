@@ -214,7 +214,8 @@ def login(request):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                user_info = mongoApi.get_user_info(email=email, fields=['password', 'email_confirmed', '_id'], session=session)
+                user_info = mongoApi.get_user_info(email=email, fields=['password', 'email_confirmed', '_id'],
+                                                   session=session)
                 if not user_info:
                     session.abort_transaction()
                     return JsonResponse({'error': 'User does not exist'}, status=404)
@@ -287,9 +288,6 @@ def delete_user(request, user_id):
 @user_authorization
 def get_schedule(request, user_id, date):
     if request.method == 'GET':
-        # date = {'year': request.data.get('year'),
-        #         'month': request.data.get('month'),
-        #         'day': request.data.get('day')}
         with client.start_session() as session:
             try:
                 session.start_transaction()
@@ -328,6 +326,7 @@ def add_event(request, user_id):
                         return JsonResponse({'error': 'problem adding new event to database'})
                 else:
                     event.first_appearance = date
+                    event.item_type = 'recurring event'
                     if mongoApi.add_recurring_event(user_id, event, session=session):
                         session.commit_transaction()
                         return JsonResponse({'success': 'new event added successfully'})
@@ -358,6 +357,7 @@ def add_task(request, user_id):
                 if task.frequency == "Once" or task.frequency is None:
                     result = mongoApi.add_task(user_id, task, session=session)
                 else:
+                    task.item_type = 'recurring task'
                     result = mongoApi.add_recurring_task(user_id, task, session=session)
 
                 if result:
@@ -390,7 +390,8 @@ def add_task_and_automate(request, user_id):
                 if task.frequency == "Once" or task.frequency is None:
                     result = mongoApi.add_task(user_id, task, session=session)
                     if result:
-                        end_time = task.deadline if task.deadline is not None else (datetime.today() + timedelta(days=7))
+                        end_time = task.deadline if task.deadline is not None else (
+                                datetime.today() + timedelta(days=7))
                         if schedule_single_task(user_id, task, datetime.today(), end_time, session=session):
                             session.commit_transaction()
                             return JsonResponse({'message': 'Task created successfully and scheduled!'}, status=201)
@@ -401,7 +402,8 @@ def add_task_and_automate(request, user_id):
                         session.abort_transaction()
                         return JsonResponse({'error': 'failed to add new task'}, status=400)
                 else:
-                    current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
+                    current_date = datetime(year=datetime.now().year, month=datetime.now().month,
+                                            day=datetime.now().day)
                     deadline = mongo_utils.find_deadline_for_next_recurring_task(task, current_date)
                     task_instance = task.generate_recurring_instance(deadline)
                     task.previous_done = deadline
@@ -453,14 +455,12 @@ def get_event(request, user_id, date):
 
 @api_view(['GET'])
 @user_authorization
-def get_monthly_calendar(request, user_id):
+def get_monthly_calendar(request, user_id, date):
     if request.method == 'GET':
-        date = {'year': request.data.get('year'),
-                'month': request.data.get('month')}
-
         with client.start_session() as session:
             try:
                 session.start_transaction()
+                date = datetime.strptime(date, "%Y-%m")
                 monthly_calendar = mongo_utils.get_monthly_calendar(user_id, date, session=session)
                 if monthly_calendar:
                     session.commit_transaction()
@@ -506,17 +506,19 @@ def edit_event(request, user_id, date):
 
 @api_view(['DELETE'])
 @user_authorization
-def delete_event(request, user_id, date):
+def delete_event(request, user_id, event_id, date):
     if request.method == 'DELETE':
-        event_id = request.data.get('_id')
-
-        if not event_id or not date:
-            return JsonResponse({'error': 'Missing required parameters'}, status=400)
-
+        item_type = request.data.get('item_type')
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                if mongoApi.delete_event(user_id, date, event_id, session=session):
+                date = datetime.fromisoformat(date)
+                if item_type == 'recurring event':
+                    result = mongoApi.delete_recurring_event(user_id, event_id, session=session)
+                else:
+                    result = mongoApi.delete_event(user_id, date, event_id, session=session)
+
+                if result:
                     session.commit_transaction()
                     return JsonResponse({'message': 'Event deleted successfully'})
                 else:
@@ -532,17 +534,20 @@ def delete_event(request, user_id, date):
 
 @api_view(['DELETE'])
 @user_authorization
-def delete_task(request, user_id):
+def delete_task(request, user_id, task_id):
     if request.method == 'DELETE':
-        task_id = request.data.get('_id')
-
+        item_type = request.data.get('item_type')
         if not task_id:
             return JsonResponse({'error': 'Missing required parameter: _id'}, status=400)
 
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                success = mongoApi.delete_task(user_id, task_id, session=session)
+                if item_type == 'recurring task':
+                    success = mongoApi.delete_recurring_task(user_id, task_id, session=session)
+                else:
+                    success = mongoApi.delete_task(user_id, task_id, session=session)
+
                 if success:
                     session.commit_transaction()
                     return JsonResponse({'message': 'Task deleted successfully'})
@@ -563,6 +568,7 @@ def edit_task(request, user_id):
     if request.method == 'PUT':
         # Extract the data from the request
         task_id = request.data.get('_id')
+        item_type = request.data.get('item_type')
         updated_data = request.data
         if not task_id:
             return JsonResponse({'error': 'Missing required parameter: _id'}, status=400)
@@ -570,7 +576,11 @@ def edit_task(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                result = mongoApi.update_task(user_id, task_id, updated_data, session=session)
+                if item_type == 'recurring task':
+                    result = mongoApi.update_recurring_task(user_id, task_id, updated_data, session=session)
+                else:
+                    result = mongoApi.update_task(user_id, task_id, updated_data, session=session)
+
                 if result:
                     session.commit_transaction()
                     return JsonResponse({'message': 'Task updated successfully'})
@@ -587,15 +597,39 @@ def edit_task(request, user_id):
 
 @api_view(['GET'])
 @user_authorization
-def get_task_list(request, user_id):
+def get_task_list(request, user_id, date):
     if request.method == 'GET':
-        date = request.data.get('date')  # could be None
-
         with client.start_session() as session:
             try:
                 session.start_transaction()
+                if date is not None:
+                    date = datetime.fromisoformat(date)
+
                 task_list = mongo_utils.get_task_list(user_id, date, session=session)
                 if task_list:
+                    session.commit_transaction()
+                    return JsonResponse(task_list)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Problem loading data'}, status=400)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@api_view(['GET'])
+@user_authorization
+def get_recurring_tasks(request, user_id):
+    if request.method == 'GET':
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                task_list = mongoApi.get_recurring_tasks(user_id, session=session)
+
+                if task_list is not None:
                     session.commit_transaction()
                     return JsonResponse(task_list)
                 else:
@@ -656,16 +690,13 @@ def update_preferences(request, user_id):
 
 @api_view(['PUT'])
 @user_authorization
-def set_day_off(request, user_id):
+def set_day_off(request, user_id, date):
     if request.method == 'PUT':
         day_off = request.data.get('day_off')
-        date = {'year': request.data.get('year'),
-                'month': request.data.get('month'),
-                'day': request.data.get('day')}
-
         with client.start_session() as session:
             try:
                 session.start_transaction()
+                date = datetime.fromisoformat(date)
                 if mongoApi.update_day_off(user_id, date, day_off, session=session):
                     session.commit_transaction()
                     return JsonResponse({'message': 'Successfully updated'})

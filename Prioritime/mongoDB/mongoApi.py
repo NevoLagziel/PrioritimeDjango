@@ -96,8 +96,8 @@ def get_yearly_calendar(user_id, year, session):
 
 def get_monthly_calendar(user_id, date, session):
     user_id = ObjectId(user_id)
-    year = int(date['year'])
-    month = int(date['month'])
+    year = date.year
+    month = date.month
     monthly_calendar = users.aggregate([
         {"$match": {"_id": user_id}},
         {"$unwind": "$calendar"},
@@ -141,9 +141,9 @@ def get_schedule(user_id, date, session):
 
 def update_schedule(user_id, date, schedule, session):
     user_id = ObjectId(user_id)
-    year = int(date['year'])
-    month = int(date['month'])
-    day = int(date['day'])
+    year = date.year
+    month = date.month
+    day = date.day
     schedule_dict = schedule.__dict__()
     result = users.update_one(
         {
@@ -365,6 +365,15 @@ def delete_event(user_id, date, event_id, session):
     return False
 
 
+def delete_recurring_event(user_id, event_id, session):
+    user_id = ObjectId(user_id)
+    result = users.update_one(
+        {"_id": user_id},
+        {"$pull": {"recurring_events": {"_id": event_id}}}
+        , session=session)
+    return result.modified_count > 0
+
+
 def get_task_list(user_id, session):  # returns tasks list as dictionary
     user_id = ObjectId(user_id)
     task_list = users.find_one(
@@ -436,7 +445,7 @@ def get_recurring_tasks(user_id, session):
             "_id": 0,
         }
         , session=session)
-    return recurring_tasks['recurring_tasks']
+    return recurring_tasks
 
 
 def update_recurring_task(user_id, task_id, updated_data, session):
@@ -446,6 +455,15 @@ def update_recurring_task(user_id, task_id, updated_data, session):
         {"_id": ObjectId(user_id), "recurring_tasks._id": task_id},
         {"$set": update_fields},
         array_filters=[{"task._id": task_id}]
+        , session=session)
+    return result.modified_count > 0
+
+
+def delete_recurring_task(user_id, task_id, session):
+    user_id = ObjectId(user_id)
+    result = users.update_one(
+        {"_id": user_id},
+        {"$pull": {"recurring_tasks": {"_id": task_id}}}
         , session=session)
     return result.modified_count > 0
 
@@ -521,6 +539,15 @@ def update_preferences(user_id, preference, session):
     return result.modified_count > 0
 
 
+def delete_preference(user_id, preference, session):
+    user_id = ObjectId(user_id)
+    result = users.delete_one(
+        {'_id': user_id},
+        {f'preferences.{preference}'}
+        , session=session)
+    return result.modified_count > 0
+
+
 def find_preference(user_id, task_name, session):
     user_id = ObjectId(user_id)
     preference = users.find_one(
@@ -534,9 +561,9 @@ def find_preference(user_id, task_name, session):
 
 
 def update_day_off(user_id, date, day_off, session):
-    year = int(date['year'])
-    month = int(date['month'])
-    day = int(date['day'])
+    year = date.year
+    month = date.month
+    day = date.day
 
     year_exist = year_exists(user_id, year, session)
 

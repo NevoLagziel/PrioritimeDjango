@@ -39,7 +39,7 @@ def schedule_tasks(user_id, list_of_task_ids, start_date, end_date, session):
     if len(activities) == 0:
         return False
 
-    best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities)
+    best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities=activities)
 
     if update_tasks(user_id, filtered_task_list, best_plan, session=session):
         return True
@@ -47,36 +47,36 @@ def schedule_tasks(user_id, list_of_task_ids, start_date, end_date, session):
     return False
 
 
-def re_schedule_tasks(user_id, date, session):
-    task_list_dict = mongo_utils.get_task_list(user_id, session=session)
-    if task_list_dict is None:
-        return False
-
-    task_list = dict_to_entities.dict_to_task_list(task_list_dict['task_list'])
-    if date['day'] is not None:
-        start_date = end_date = datetime(year=date['year'], month=date['month'], day=date['day'])
-    else:
-        start_date, end_date = get_first_and_last_date_of_month(date['year'], date['month'])
-
-    filtered_task_list = task_list.filter_by_date(start_date, end_date)
-    if filtered_task_list is None or len(filtered_task_list) == 0:
-        return False
-
-    activities = data_preparation.data_preparation(user_id, filtered_task_list, start_date, end_date, session=session)
-    if len(activities) == 0:
-        return False
-
-    prev_schedule = data_preparation.arrange_prev_schedule(filtered_task_list)
-    best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities=activities, prev_schedule=prev_schedule)
-
-    if update_tasks(user_id, filtered_task_list, best_plan, session=session):
-        return True
-
-    return False
+# def re_schedule_tasks_2(user_id, date, session):
+#     task_list_dict = mongo_utils.get_task_list(user_id, session=session)
+#     if task_list_dict is None:
+#         return False
+#
+#     task_list = dict_to_entities.dict_to_task_list(task_list_dict['task_list'])
+#     if date['day'] is not None:
+#         start_date = end_date = datetime(year=date['year'], month=date['month'], day=date['day'])
+#     else:
+#         start_date, end_date = get_first_and_last_date_of_month(date['year'], date['month'])
+#
+#     filtered_task_list = task_list.filter_by_date(start_date, end_date)
+#     if filtered_task_list is None or len(filtered_task_list) == 0:
+#         return False
+#
+#     activities = data_preparation.data_preparation(user_id, filtered_task_list, start_date, end_date, session=session)
+#     if len(activities) == 0:
+#         return False
+#
+#     prev_schedule = data_preparation.arrange_prev_schedule(filtered_task_list)
+#     best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities=activities, prev_schedule=prev_schedule)
+#
+#     if update_tasks_2(user_id, filtered_task_list, best_plan, session=session):
+#         return True
+#
+#     return False
 
 
 # instead of leaving the tasks in the list, placing them in the calendar
-def re_schedule_tasks_2(user_id, date, session):
+def re_schedule_tasks(user_id, date, session):
     if date['day'] is not None:
         start_date = end_date = datetime(year=date['year'], month=date['month'], day=date['day'])
     else:
@@ -91,9 +91,9 @@ def re_schedule_tasks_2(user_id, date, session):
         return False
 
     prev_schedule = data_preparation.arrange_prev_schedule(task_list)
-    best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities, prev_schedule)
-
-    if update_tasks_2(user_id, task_list, best_plan, session=session):
+    best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities=activities, prev_schedule=prev_schedule)
+    print(best_plan, unscheduled_activities)
+    if update_tasks(user_id, task_list, best_plan, session=session):
         return True
 
     return False
@@ -110,9 +110,9 @@ def remove_all_scheduled_tasks_from_schedule(user_id, start_date, end_date, sess
 
         tasks_removed = 0
         for event in schedule.event_list:
-            if event['type'] == 'task':
-                task = schedule.event_list.pop(event)
-                task_list.append(task)
+            if event.item_type == 'task':
+                schedule.event_list.remove(event)
+                task_list.append(event)
                 tasks_removed += 1
 
         if tasks_removed > 0:
@@ -125,9 +125,13 @@ def remove_all_scheduled_tasks_from_schedule(user_id, start_date, end_date, sess
 
 
 # updating the tasks in the calendar and not in the task list
-def update_tasks_2(user_id, task_list, best_plan, session):
+def update_tasks(user_id, task_list, best_plan, session):
     for task in task_list:
-        start_time, end_time = best_plan[task.id()] if best_plan[task.id()] is not None else None, None
+        if best_plan[task.id()] is not None:
+            start_time, end_time = best_plan[task.id()]
+        else:
+            start_time, end_time = None, None
+
         was_scheduled = False if task.status == 'pending' else True
         task.schedule(start_time=start_time, end_time=end_time)
         if start_time is not None and end_time is not None:
@@ -145,7 +149,7 @@ def update_tasks_2(user_id, task_list, best_plan, session):
 
 
 # need to check what happened if the task did not get scheduled !!!
-def update_tasks(user_id, task_list, best_plan, session):
+def update_tasks_2(user_id, task_list, best_plan, session):
     for task in task_list:
         if best_plan[task.id()] is not None:
             start_time, end_time = best_plan[task.id()]

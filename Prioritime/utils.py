@@ -2,11 +2,9 @@ import jwt
 from config import JWT_SECRET_KEY
 from datetime import timedelta
 from django.utils import timezone
-from .Model_Logic import calendar_objects
-from .mongoDB import mongoApi
 
 JWT_ALGORITHM = 'HS256'
-JWT_EXPIRATION_DELTA = timedelta(hours=10)
+JWT_EXPIRATION_DELTA = timedelta(hours=100000)
 
 
 def generate_jwt_token(_id):

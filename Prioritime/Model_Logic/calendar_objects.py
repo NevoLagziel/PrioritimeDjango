@@ -37,13 +37,13 @@ class CalendarItem:
 
 
 class Event(CalendarItem):
-    def __init__(self, start_time, end_time, sub_event=None, first_appearance=None, item_type='event', **kwargs):
+    def __init__(self, start_time, end_time, sub_event=None, first_appearance=None, item_type=None, **kwargs):
         super().__init__(**kwargs)
         self.first_appearance = datetime.fromisoformat(first_appearance) if first_appearance is not None else None
         self.start_time = datetime.fromisoformat(start_time)
         self.end_time = datetime.fromisoformat(end_time)
         self.sub_event = sub_event
-        self.item_type = item_type
+        self.item_type = item_type if item_type is not None else 'event'
 
     def __dict__(self):
         event_dict = super().__dict__()
@@ -57,7 +57,7 @@ class Event(CalendarItem):
 
 class Task(CalendarItem):
     def __init__(self, priority=None, deadline=None, status=None, previous_done=None, start_time=None, end_time=None,
-                 item_type='task', **kwargs):
+                 item_type=None, **kwargs):
         super().__init__(**kwargs)
         self.priority = priority
         self.deadline = deadline if deadline is None else datetime.fromisoformat(deadline)
@@ -65,7 +65,7 @@ class Task(CalendarItem):
         self.previous_done = previous_done if previous_done is None else datetime.fromisoformat(previous_done)
         self.start_time = start_time if start_time is None else datetime.fromisoformat(start_time)
         self.end_time = end_time if end_time is None else datetime.fromisoformat(end_time)
-        self.item_type = item_type
+        self.item_type = item_type if item_type is not None else 'task'
 
     def task_completed(self):
         self.status = 'done'
@@ -124,7 +124,7 @@ class Tasks:
     def get_list_by_deadline(self, deadline):
         task_list = []
         for task in self.list_of_tasks:
-            if task.deadline is not None and task.deadline.date() == deadline:
+            if task.deadline is not None and task.deadline.date() == deadline.date():
                 task_list.append(task)
 
         return task_list

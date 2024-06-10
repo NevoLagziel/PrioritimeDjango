@@ -161,7 +161,7 @@ class Schedule:
         self.day = day
         self.start_time = start_time
         self.end_time = end_time
-        self.event_list = event_list
+        self.event_list = event_list or []
         self.day_off = day_off
 
     def __dict__(self):

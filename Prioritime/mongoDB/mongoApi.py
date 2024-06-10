@@ -298,21 +298,24 @@ def get_event(user_id, date, event_id, session):
 
 
 def update_event(user_id, event_id, date, updated_data, session):
+    year = date.year
+    month = date.month
+    day = date.day
     update_fields = {f"calendar.$[y].months.$[m].days.$[d].event_list.$[event].{key}": value for key, value in
                      updated_data.items()}
 
     result = users.update_one(
         {
             "_id": ObjectId(user_id),
-            "calendar.year": date['year'],
-            "calendar.months.month": date['month'],
-            "calendar.months.days.date": date['day']
+            "calendar.year": year,
+            "calendar.months.month": month,
+            "calendar.months.days.date": day
         },
         {"$set": update_fields},
         array_filters=[
-            {"y.year": date['year']},
-            {"m.month": date['month']},
-            {"d.date": date['day']},
+            {"y.year": year},
+            {"m.month": month},
+            {"d.date": day},
             {"event._id": event_id}
         ]
         , session=session)

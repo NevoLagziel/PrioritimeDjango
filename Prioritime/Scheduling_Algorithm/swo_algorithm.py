@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from Prioritime.Scheduling_Algorithm.data_preparation import Activity
 
 
 # consider adding another score for activity that is just part in a preferred time
@@ -235,7 +234,6 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 
     return best_plan, unscheduled_activities
 
-
 # # Example usage
 # from Prioritime.Model_Logic.calendar_objects import Task
 # from Prioritime.mongoDB import mongoApi
@@ -297,4 +295,3 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 #
 # final_plan, unschedule_tasks = schedule_activities(activities, prev_schedule=prev_schedule)
 # print(f"plan: {final_plan} , unscheduled activities: {unschedule_tasks}")
-

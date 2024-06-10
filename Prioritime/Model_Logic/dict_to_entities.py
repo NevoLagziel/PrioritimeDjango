@@ -2,6 +2,7 @@ from Prioritime.Model_Logic import calendar_objects
 from Prioritime.mongoDB import mongoApi
 
 
+# From mongodb #
 def dict_to_task(task_dict):
     task = calendar_objects.Task(**task_dict)
     # task = calendar_objects.Task(
@@ -85,6 +86,8 @@ def dict_to_monthly_calendar(monthly_calendar_dict):
     return monthly_calendar
 
 
+# From the frontend #
+
 def create_new_task(user_id, data, session):
     # must have at least a name
     if 'name' not in data:
@@ -92,7 +95,8 @@ def create_new_task(user_id, data, session):
 
     name = data.get('name')  # string
     status = data.get('status')  # filled by default
-    if len(data.keys()) == 2:
+    frequency = data.get('frequency')  # filled by default
+    if (frequency == 'Once' and len(data.keys()) == 3) or (frequency is None and len(data.keys()) == 2):
         preference = mongoApi.find_preference(user_id, name, session=session)
         if preference:
             preference = preference[name]
@@ -108,12 +112,12 @@ def create_new_task(user_id, data, session):
             name=name,
             description=data.get('description'),
             duration=data.get('duration'),
-            frequency=data.get('frequency'),
+            frequency=frequency,
             category=data.get('category'),
             tags=data.get('tags'),
-            # reminders=reminders,
+            reminders=data.get('reminders'),
             location=data.get('location'),
-            # priority=priority,
+            priority=data.get('priority'),
             deadline=data.get('deadline'),
             status=status,
         )
@@ -142,3 +146,20 @@ def create_new_event(data):
         sub_event=data.get('sub_event'),
     )
     return event
+
+
+def organize_data_edit_event(data):
+    organized_data = {
+        '_id': data.get('id') or data.get('_id'),
+        'name': data.get('title') or data.get('name'),
+        'start_time': data.get('start') or data.get('start_time'),
+        'end_time': data.get('end') or data.get('end_time'),
+        'category': data.get('category'),
+        'tags': data.get('tags'),
+        'duration': data.get('duration'),
+        'item_type': data.get('type') or data.get('item_type'),
+        'description': data.get('description'),
+        'location': data.get('location'),
+        'frequency': data.get('frequency'),
+    }
+    return organized_data

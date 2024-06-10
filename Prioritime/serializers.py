@@ -2,13 +2,13 @@ from rest_framework import serializers
 
 
 class CalendarItemSerializer(serializers.Serializer):
-    _id = serializers.CharField(read_only=True)
-    name = serializers.CharField(max_length=200)
+    _id = serializers.CharField(allow_blank=True)
+    name = serializers.CharField(max_length=200, required=True)
     description = serializers.CharField(allow_blank=True, required=False)
-    duration = serializers.DurationField(required=False)
+    duration = serializers.DurationField(allow_blank=True, required=False)
     frequency = serializers.CharField(allow_blank=True, required=False)
     category = serializers.CharField(allow_blank=True, required=False)
-    tags = serializers.ListField(child=serializers.CharField(), required=False)
+    tags = serializers.ListField(child=serializers.CharField(), allow_blank=True, required=False)
     reminders = serializers.IntegerField(default=30)
     location = serializers.CharField(allow_blank=True, required=False)
     creation_date = serializers.DateTimeField()

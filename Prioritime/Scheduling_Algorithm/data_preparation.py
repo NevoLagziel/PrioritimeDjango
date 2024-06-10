@@ -22,27 +22,8 @@ class DayPart(Enum):
     Evening = (time(hour=16), time(hour=20))
 
 
-def data_preparation(user_id, task_list, begin_date, end_date, session):
+def create_activities(user_id, task_list, all_free_time_blocks, session):
     activities = []
-    all_free_time_blocks = []
-    current_date = begin_date
-    preferences = mongoApi.find_preference(user_id, 'general', session=session)
-    general_preferences = preferences['general']
-    while current_date <= end_date:
-        date = {'year': current_date.year, 'month': current_date.month, 'day': current_date.day}
-        schedule = mongo_utils.get_schedule(user_id, current_date, session=session)
-        if schedule is None:
-            return None
-
-        if not schedule.day_off:
-            all_free_time_blocks.append(schedule.free_time_init(
-                datetime.strptime(general_preferences['start_time'], "%H:%M:%S")
-                .replace(year=date['year'], month=date['month'], day=date['day']),
-                datetime.strptime(general_preferences['end_time'], "%H:%M:%S")
-                .replace(year=date['year'], month=date['month'], day=date['day'])))
-
-        current_date = current_date + timedelta(days=1)
-
     for task in task_list:
         if task.duration:
             preference_dict = mongoApi.find_preference(user_id, task.name, session=session)
@@ -64,6 +45,81 @@ def data_preparation(user_id, task_list, begin_date, end_date, session):
             )
             activities.append(activity)
 
+    return activities
+
+
+def data_preparation(user_id, task_list, begin_date, end_date, session):
+    all_free_time_blocks = []
+    current_date = begin_date
+    preferences = mongoApi.find_preference(user_id, 'general', session=session)
+    general_preferences = preferences['general']
+    while current_date <= end_date:
+        schedule = mongo_utils.get_schedule(user_id, current_date, session=session)
+        if schedule is None:
+            return None
+
+        if not schedule.day_off:
+            all_free_time_blocks.append(schedule.free_time_init(
+                datetime.strptime(general_preferences['start_time'], "%H:%M:%S")
+                .replace(year=current_date.year, month=current_date.month, day=current_date.day),
+                datetime.strptime(general_preferences['end_time'], "%H:%M:%S")
+                .replace(year=current_date.year, month=current_date.month, day=current_date.day)))
+
+        current_date = current_date + timedelta(days=1)
+
+    activities = create_activities(user_id, task_list, all_free_time_blocks, session=session)
+    # activities = []
+    # for task in task_list:
+    #     if task.duration:
+    #         preference_dict = mongoApi.find_preference(user_id, task.name, session=session)
+    #         preferred_days = None
+    #         preferred_times = None
+    #         if preference_dict:
+    #             preference_dict = preference_dict[task.name]
+    #             preference = user_preferences.Preference(**preference_dict)
+    #             preferred_days = preference.possible_days
+    #             preferred_times = arrange_preferred_times(preference.day_part)
+    #
+    #         activity = Activity(
+    #             id=task.id(),
+    #             duration=task.duration,
+    #             deadline=task.deadline,
+    #             preferred_days=preferred_days,
+    #             preferred_times=preferred_times,
+    #             free_blocks=arrange_free_time_blocks(task, all_free_time_blocks)
+    #         )
+    #         activities.append(activity)
+
+    return activities
+
+
+# The version where the schedules are transferred and updated only at the end
+def data_preparation_3(user_id, task_list, begin_date, end_date, session, schedules=None):
+    all_free_time_blocks = []
+    current_date = begin_date
+    preferences = mongoApi.find_preference(user_id, 'general', session=session)
+    general_preferences = preferences['general']
+    i = 0
+    while current_date <= end_date:
+        if schedules is None:
+            schedule = mongo_utils.get_schedule(user_id, current_date, session=session)
+        else:
+            schedule = schedules[i]
+
+        if schedule is None:
+            return None
+
+        if not schedule.day_off:
+            all_free_time_blocks.append(schedule.free_time_init(
+                datetime.strptime(general_preferences['start_time'], "%H:%M:%S")
+                .replace(year=current_date.year, month=current_date.month, day=current_date.day),
+                datetime.strptime(general_preferences['end_time'], "%H:%M:%S")
+                .replace(year=current_date.year, month=current_date.month, day=current_date.day)))
+
+        current_date = current_date + timedelta(days=1)
+        i = i+1
+
+    activities = create_activities(user_id, task_list, all_free_time_blocks, session=session)
     return activities
 
 

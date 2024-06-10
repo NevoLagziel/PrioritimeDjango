@@ -2,7 +2,6 @@ from . import mongoApi
 from Prioritime.Model_Logic import dict_to_entities, calendar_objects
 import calendar
 from datetime import datetime, timedelta
-from datetime import date as date_lib
 
 
 def create_new_year(year):
@@ -103,7 +102,8 @@ def insert_recurring_events_to_schedule(recurring_events, schedule, date):
     for recurring_event_dict in recurring_events:
         recurring_event = dict_to_entities.dict_to_event(recurring_event_dict)
         if is_recurring_on_date(recurring_event, date):
-            recurring_event.start_time = recurring_event.start_time.replace(year=date.year, month=date.month, day=date.day)
+            recurring_event.start_time = recurring_event.start_time.replace(year=date.year, month=date.month,
+                                                                            day=date.day)
 
             recurring_event.end_time = recurring_event.end_time.replace(year=date.year, month=date.month, day=date.day)
 
@@ -168,27 +168,52 @@ def is_recurring_on_date(recurring_event, target_date):
 def update_event(user_id, old_date, new_date, event_id, updated_data, session):
     item_type = updated_data.get('item_type')
     if item_type == 'recurring event':
-        new_updated_data = updated_data.copy()
-        if old_date.date() != new_date.date():
-            new_updated_data['first_appearance'] = new_date.isoformat()
+        if updated_data.get('frequency') == 'Once':
+            event_dict = get_recurring_event(user_id, event_id, session=session)
+            if event_dict is None:
+                return False
 
-        if mongoApi.update_recurring_event(user_id, event_id, new_updated_data, session=session):
-            return True
+            event_dict.update(updated_data)
+            event_dict['item_type'] = 'event'
+            event = dict_to_entities.dict_to_event(event_dict)
+            if mongoApi.delete_recurring_event(user_id, event_id, session=session):
+                if mongoApi.add_event(user_id, event, new_date, session=session):
+                    return True
+
+        else:
+            new_updated_data = updated_data.copy()
+            if old_date.date() != new_date.date():
+                new_updated_data['first_appearance'] = new_date.isoformat()
+
+            if mongoApi.update_recurring_event(user_id, event_id, new_updated_data, session=session):
+                return True
 
     else:
-        if old_date.date() == new_date.date():
+        change_to_recurring = False if updated_data.get('frequency') == 'Once' or updated_data.get('frequency') is None else True
+        if old_date.date() == new_date.date() and not change_to_recurring:
             if mongoApi.update_event(user_id, event_id, old_date, updated_data, session=session):
                 return True
 
         else:
-            event = mongoApi.get_event(user_id, old_date, event_id, session=session)
-            if event is None:
+            event_dict = mongoApi.get_event(user_id, old_date, event_id, session=session)
+            if event_dict is None:
                 return False
 
-            event.update(updated_data)
+            event_dict.update(updated_data)
+            if event_dict.get('item_type') == 'task':
+                event = dict_to_entities.dict_to_task(event_dict)
+            else:
+                event = dict_to_entities.dict_to_event(event_dict)
+
             if mongoApi.delete_event(user_id, old_date, event_id, session=session):
-                if mongoApi.add_event(user_id, event, new_date, session=session):
-                    return True
+                if change_to_recurring:
+                    event.first_appearance = event.start_time
+                    event.item_type = 'recurring event'
+                    if mongoApi.add_recurring_event(user_id, event, session=session):
+                        return True
+                else:
+                    if mongoApi.add_event(user_id, event, new_date, session=session):
+                        return True
 
     return False
 
@@ -257,3 +282,15 @@ def find_deadline_for_next_recurring_task(recurring_task, current_date):
             second=59,
         )
     return deadline
+
+
+def get_recurring_event(user_id, event_id, session):
+    recurring_events = mongoApi.get_recurring_events(user_id, session=session)
+    if not recurring_events:
+        return None
+
+    for event in recurring_events:
+        if event['_id'] == event_id:
+            return event
+
+    return None

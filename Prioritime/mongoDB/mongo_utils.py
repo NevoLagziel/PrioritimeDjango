@@ -66,7 +66,6 @@ def get_monthly_calendar(user_id, date, session):
         # remove that if updating the tasks to be in a schedule
         # if tasks:
         #     insert_scheduled_tasks_to_schedule(tasks, schedule, datetime_date)
-
     return monthly_calendar
 
 
@@ -181,11 +180,10 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
                     return True
 
         else:
-            new_updated_data = updated_data.copy()
             if old_date.date() != new_date.date():
-                new_updated_data['first_appearance'] = new_date.isoformat()
+                updated_data['first_appearance'] = new_date.isoformat()
 
-            if mongoApi.update_recurring_event(user_id, event_id, new_updated_data, session=session):
+            if mongoApi.update_recurring_event(user_id, event_id, updated_data, session=session):
                 return True
 
     else:

@@ -161,5 +161,14 @@ def organize_data_edit_event(data):
         'description': data.get('description'),
         'location': data.get('location'),
         'frequency': data.get('frequency'),
+        'first_appearance': data.get('first_appearance')
     }
+    if organized_data.get('start_time'):
+        organized_data['start_time'] = organized_data.get('start_time').split('.')[0]
+        print(organized_data['start_time'])
+
+    if organized_data.get('end_time'):
+        organized_data['end_time'] = organized_data.get('end_time').split('.')[0]
+        print(organized_data['end_time'])
+
     return organized_data

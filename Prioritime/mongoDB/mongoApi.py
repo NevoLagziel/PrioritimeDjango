@@ -302,7 +302,7 @@ def update_event(user_id, event_id, date, updated_data, session):
     month = date.month
     day = date.day
     update_fields = {f"calendar.$[y].months.$[m].days.$[d].event_list.$[event].{key}": value for key, value in
-                     updated_data.items()}
+                     updated_data.items() if value is not None}
 
     result = users.update_one(
         {
@@ -324,7 +324,7 @@ def update_event(user_id, event_id, date, updated_data, session):
 
 def update_recurring_event(user_id, event_id, updated_data, session):
     user_id = ObjectId(user_id)
-    update_fields = {f"recurring_events.$[event].{key}": value for key, value in updated_data.items()}
+    update_fields = {f"recurring_events.$[event].{key}": value for key, value in updated_data.items() if value is not None}
     result = users.update_one(
         {"_id": ObjectId(user_id), "recurring_events._id": event_id},
         {"$set": update_fields},
@@ -416,7 +416,7 @@ def delete_task(user_id, task_id, session):
 
 def update_task(user_id, task_id, updated_data, session):
     user_id = ObjectId(user_id)
-    update_fields = {f"task_list.$[task].{key}": value for key, value in updated_data.items()}
+    update_fields = {f"task_list.$[task].{key}": value for key, value in updated_data.items() if value is not None}
     result = users.update_one(
         {"_id": ObjectId(user_id), "task_list._id": task_id},
         {"$set": update_fields},
@@ -453,7 +453,7 @@ def get_recurring_tasks(user_id, session):
 
 def update_recurring_task(user_id, task_id, updated_data, session):
     user_id = ObjectId(user_id)
-    update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items()}
+    update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items() if value is not None}
     result = users.update_one(
         {"_id": ObjectId(user_id), "recurring_tasks._id": task_id},
         {"$set": update_fields},

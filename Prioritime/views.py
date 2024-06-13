@@ -478,10 +478,9 @@ def get_monthly_calendar(request, user_id, date):
 
 @api_view(['PUT'])
 @user_authorization
-def edit_event(request, user_id, date):
+def edit_event(request, user_id, event_id, date):
     if request.method == 'PUT':
         data = dict_to_entities.organize_data_edit_event(request.data)
-        event_id = data.get('_id')
         if not event_id:
             return JsonResponse({'error': 'missing data'}, status=400)
 

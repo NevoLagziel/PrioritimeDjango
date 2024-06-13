@@ -508,7 +508,7 @@ def edit_event(request, user_id, date):
 @user_authorization
 def delete_event(request, user_id, event_id, date):
     if request.method == 'DELETE':
-        item_type = request.data.get('type') or request.data.get('item_type')
+        item_type = request.GET.get('type') or request.data.get('item_type')
         with client.start_session() as session:
             try:
                 session.start_transaction()
@@ -537,7 +537,7 @@ def delete_event(request, user_id, event_id, date):
 @user_authorization
 def delete_task(request, user_id, task_id):
     if request.method == 'DELETE':
-        item_type = request.data.get('type') or request.data.get('item_type')
+        item_type = request.GET.get('type') or request.data.get('item_type')
         if not task_id:
             return JsonResponse({'error': 'Missing required parameter: _id'}, status=400)
 
@@ -598,8 +598,9 @@ def edit_task(request, user_id, task_id):
 
 @api_view(['GET'])
 @user_authorization
-def get_task_list(request, user_id, date):
+def get_task_list(request, user_id):
     if request.method == 'GET':
+        date = request.GET.get('date')
         with client.start_session() as session:
             try:
                 session.start_transaction()

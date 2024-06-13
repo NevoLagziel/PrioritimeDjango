@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, time
 from bson import ObjectId
 from faker import Faker
 from db_connection import db
-from mongoDB import mongo_utils
+from Prioritime.mongoDB import mongo_utils
 from django.contrib.auth.hashers import make_password
 import os
 import django
@@ -24,8 +24,8 @@ users = db['users']
 # Function to generate random events
 def generate_random_events(num_events):
     events = []
-    recurrence_options = ['Once', 'Every day', 'Every week', 'Every month', 'Every 2 weeks']
-    recurrence_weights = [0.9, 0.03, 0.03, 0.02, 0.02]
+    recurrence_options = ['Once', 'Every Day', 'Every Week', 'Every Month', 'Every 2 Weeks']
+    recurrence_weights = [0.92, 0.02, 0.02, 0.02, 0.02]
     for _ in range(num_events):
         # start_datetime = fake.date_time_this_year(after_now=True)
         start_datetime = fake.date_time_between_dates(datetime_start=datetime.now(),
@@ -56,8 +56,8 @@ def generate_random_events(num_events):
 # Function to generate random tasks
 def generate_random_tasks(num_tasks):
     tasks = []
-    recurrence_options = ['Once', 'Every day', 'Every week', 'Every month', 'Every 2 weeks']
-    recurrence_weights = [0.9, 0.03, 0.03, 0.02, 0.02]
+    recurrence_options = ['Once', 'Every Day', 'Every Week', 'Every Month', 'Every 2 Weeks']
+    recurrence_weights = [0.92, 0.02, 0.02, 0.02, 0.02]
     for _ in range(num_tasks):
         recurring = random.choices(recurrence_options, weights=recurrence_weights, k=1)[0]
         tasks.append({
@@ -67,7 +67,7 @@ def generate_random_tasks(num_tasks):
             "start_time": None,
             "end_time": None,
             "duration": random.randint(30, 500),
-            "frequency": random.choices(recurrence_options, weights=recurrence_weights, k=1)[0],
+            "frequency": recurring,
             "category": random.choice(["work", "personal", "health", "other"]),
             "tags": [fake.word() for _ in range(random.randint(1, 3))],
             "reminders": random.randint(1, 60),
@@ -155,7 +155,6 @@ def generate_random_user(num_events=2, num_tasks=3):
             'recurring_events': recurring_reduced_events_list,
         }
     }
-
     return user, user_to_print
 
 

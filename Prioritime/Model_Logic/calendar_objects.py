@@ -100,7 +100,7 @@ class Task(CalendarItem):
             location=self.location,
             creation_date=self.creation_date,
             priority=self.priority,
-            deadline=deadline,
+            deadline=deadline.isoformat(),
             status='pending',
         )
         return new_task

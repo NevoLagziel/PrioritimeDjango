@@ -5,5 +5,8 @@ from django.urls import include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("", include("Prioritime.urls"))
+    path("", include("Prioritime.urls.schedule_urls")),
+    path("", include("Prioritime.urls.event_urls")),
+    path("", include("Prioritime.urls.user_urls")),
+    path("", include("Prioritime.urls.task_urls"))
 ]

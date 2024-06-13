@@ -245,7 +245,7 @@ def insert_recurring_tasks_to_task_list(user_id, session):
 
     current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
     recurring_tasks = dict_to_entities.dict_to_task_list(recurring_tasks_dict)
-    for recurring_task in recurring_tasks:
+    for recurring_task in recurring_tasks.list_of_tasks:
         if recurring_task.previous_done is None or recurring_task.previous_done < current_date:
             deadline = find_deadline_for_next_recurring_task(recurring_task, current_date)
 

@@ -25,7 +25,7 @@ def create_new_month(year, month):
     monthly_calendar = calendar_objects.MonthlyCalendar(
         month=month,
         number_of_days=num_of_days,
-        starting_day=calendar.monthrange(year, month)[0],
+        starting_day=calendar.monthrange(year, month)[0] + 1,
         list_of_schedules=list_of_schedules
     )
     return monthly_calendar
@@ -49,12 +49,11 @@ def get_monthly_calendar(user_id, date, session):
         monthly_calendar = create_new_month(year, month)
 
     recurring_events = mongoApi.get_recurring_events(user_id, session=session)
-    task_list_dict = get_task_list(user_id, session=session)
-    if recurring_events is None or task_list_dict is None:
+    if recurring_events is None:
         return None
 
-    task_list_dict = task_list_dict['task_list']
-    if not recurring_events and not task_list_dict:
+    # task_list_dict = task_list_dict['task_list']
+    if not recurring_events:
         return monthly_calendar
 
     # tasks = dict_to_entities.dict_to_task_list(task_list_dict) if task_list_dict else None
@@ -97,6 +96,22 @@ def get_schedule(user_id, date, session):
     return schedule
 
 
+def get_date_range_schedules(user_id, start_date, end_date, session):
+    if start_date > end_date:
+        return None
+
+    schedules = {}
+    current_date = start_date
+    while current_date <= end_date:
+        schedule = get_schedule(user_id, current_date, session=session)
+        if schedule is None:
+            return None
+        schedules[str(current_date.date())] = schedule.__dict__()
+        current_date = current_date + timedelta(days=1)
+
+    return schedules
+
+
 def insert_recurring_events_to_schedule(recurring_events, schedule, date):
     for recurring_event_dict in recurring_events:
         recurring_event = dict_to_entities.dict_to_event(recurring_event_dict)
@@ -131,6 +146,7 @@ def is_recurring_on_date(recurring_event, target_date):
                     return True
 
         else:
+            first_appearance = datetime(year=first_appearance.year, month=first_appearance.month, day=first_appearance.day)
             delta_days = (target_date - first_appearance).days
             if recurrence_pattern == 'Every Week':
                 return delta_days % 7 == 0
@@ -218,6 +234,7 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
 
 def get_task_list(user_id, deadline=None, session=None):
     if not insert_recurring_tasks_to_task_list(user_id, session=session):
+        print('problem')
         return None
 
     task_list_dict = mongoApi.get_task_list(user_id, session=session)
@@ -259,16 +276,17 @@ def insert_recurring_tasks_to_task_list(user_id, session):
     return True
 
 
+# works for a week from Sunday to Saturday and not Monday to Sunday
 def find_deadline_for_next_recurring_task(recurring_task, current_date):
     deadline = None
     recurrence_pattern = recurring_task.frequency
     if recurrence_pattern == 'Every Day':
         deadline = current_date + timedelta(hours=23, minutes=59, seconds=59)
     elif recurrence_pattern == 'Every Week':
-        week_start = current_date - timedelta(days=current_date.weekday())
+        week_start = current_date - timedelta(days=(current_date.weekday() + 1) % 7)
         deadline = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
     elif recurrence_pattern == 'Every 2 Weeks':
-        week_start = current_date - timedelta(days=current_date.weekday())
+        week_start = current_date - timedelta(days=(current_date.weekday() + 1) % 7)
         deadline = week_start + timedelta(days=13, hours=23, minutes=59, seconds=59)
     elif recurrence_pattern == 'Every Month':
         deadline = datetime(

@@ -108,17 +108,21 @@ def create_new_task(user_id, data, session):
             task = calendar_objects.Task(name=name, status=status)
     else:
         # creating task by the data entered by the user
+        deadline = data.get('deadline') or data.get('selectedDateTime')
+        if deadline:
+            deadline = deadline.split('.')[0]
+
         task = calendar_objects.Task(
             name=name,
-            description=data.get('description'),
+            description=data.get('description') or data.get('details'),
             duration=data.get('duration'),
             frequency=frequency,
-            category=data.get('category'),
+            category=data.get('category') or data.get('selectedCategory'),
             tags=data.get('tags'),
             reminders=data.get('reminders'),
             location=data.get('location'),
             priority=data.get('priority'),
-            deadline=data.get('deadline'),
+            deadline=deadline,
             status=status,
         )
 
@@ -161,14 +165,13 @@ def organize_data_edit_event(data):
         'description': data.get('description'),
         'location': data.get('location'),
         'frequency': data.get('frequency'),
-        'first_appearance': data.get('first_appearance')
+        'reminders': data.get('reminders'),
+        'sub_event': data.get('sub_event')
     }
     if organized_data.get('start_time'):
         organized_data['start_time'] = organized_data.get('start_time').split('.')[0]
-        print(organized_data['start_time'])
 
     if organized_data.get('end_time'):
         organized_data['end_time'] = organized_data.get('end_time').split('.')[0]
-        print(organized_data['end_time'])
 
     return organized_data

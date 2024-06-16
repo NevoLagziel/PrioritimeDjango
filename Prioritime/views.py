@@ -262,6 +262,29 @@ def get_user_info(request, user_id):
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
+@api_view(['PUT'])
+@user_authorization
+def update_user_info(request, user_id):
+    if request.method == 'PUT':
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                updated_data = request.data
+                result = mongoApi.update_user_info(user_id, updated_data, session=session)
+                if result:
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'User details updated successfully'}, status=200)
+                else:
+                    session.abort_transaction()
+                return JsonResponse({'error': 'Problem updating user'}, status=404)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+
 @api_view(['DELETE'])
 @user_authorization
 def delete_user(request, user_id):
@@ -299,6 +322,30 @@ def get_schedule(request, user_id, date):
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Could not find schedule'}, status=404)
+
+            except Exception as e:
+                session.abort_transaction()
+                return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'wrong request'}, status=400)
+
+
+@api_view(['GET'])
+@user_authorization
+def get_date_range_schedules(request, user_id, start_date, end_date):
+    if request.method == 'GET':
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                start_date = datetime.fromisoformat(start_date)
+                end_date = datetime.fromisoformat(end_date)
+                schedules = mongo_utils.get_date_range_schedules(user_id, start_date, end_date, session=session)
+                if schedules:
+                    session.commit_transaction()
+                    return JsonResponse(schedules)
+                else:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Could not find schedules'}, status=404)
 
             except Exception as e:
                 session.abort_transaction()
@@ -498,6 +545,7 @@ def edit_event(request, user_id, event_id, date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -607,6 +655,7 @@ def get_task_list(request, user_id):
                     date = datetime.fromisoformat(date)
 
                 task_list = mongo_utils.get_task_list(user_id, date, session=session)
+                print(task_list)
                 if task_list:
                     session.commit_transaction()
                     return JsonResponse(task_list)
@@ -744,16 +793,25 @@ def automatic_scheduling(request, user_id):
 
 @api_view(['POST'])
 @user_authorization
-def re_automate(request, user_id):
+def re_automate(request, user_id, date):
     if request.method == 'POST':
-        date = {'year': request.data.get('year'),
-                'month': request.data.get('month'),
-                'day': request.data.get('day')}
+        if len(date) == 7:
+            date = datetime.strptime(date, "%Y-%m")
+            full_date = {'year': date.year,
+                         'month': date.month,
+                         'day': None}
+        elif len(date) == 10:
+            date = datetime.fromisoformat(date)
+            full_date = {'year': date.year,
+                         'month': date.month,
+                         'day': date.day}
+        else:
+            return JsonResponse({'error': 'Wrong date'}, status=500)
 
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                if re_schedule_tasks(user_id, date, session=session):
+                if re_schedule_tasks(user_id, full_date, session=session):
                     session.commit_transaction()
                     return JsonResponse({'message': 'Tasks scheduled successfully'}, status=200)
                 else:
@@ -762,6 +820,7 @@ def re_automate(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)

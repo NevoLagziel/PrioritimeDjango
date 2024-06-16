@@ -83,6 +83,16 @@ def find_best_start_time(activity, prev_start=None):
         if current_utility > best_utility:
             best_start_time = start
             best_utility = current_utility
+        # new added for handling prev start
+        if prev_start is not None:
+            if prev_start == start:
+                new_start = start + timedelta(minutes=activity.duration)
+                if new_start <= end:
+                    current_utility = utility(activity, new_start, prev_start)
+                    if current_utility > best_utility:
+                        best_start_time = new_start
+                        best_utility = current_utility
+
 
     # If no preferred time is found, check all free blocks
     # if not best_st art_time:
@@ -146,6 +156,18 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
     best_utility = float('-inf')
     unscheduled_activities = None
     consecutive_no_improvement = 0
+
+    # if len(activities) == 1:
+    #     best_start_time = find_best_start_time(activities[0], prev_start=prev_schedule[
+    #         activities[0].id].start_time if prev_schedule is not None else None)
+    #     if best_start_time:
+    #         planned_end = best_start_time + timedelta(minutes=activities[0].duration)
+    #         best_plan = {activities[0].id: (best_start_time, planned_end)}
+    #     else:
+    #         unscheduled_activities = set()
+    #         unscheduled_activities.add(activities[0].id)
+    #
+    #     return best_plan, unscheduled_activities
 
     for act in activities:
         filter_free_time_blocks(act)
@@ -217,7 +239,7 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
         # to make sure it would pick a different result
         if prev_schedule is not None:
             if same_schedule_results(current_plan, prev_schedule):
-                penalty += float('-inf')
+                penalty += -100
 
         current_utility += penalty
 

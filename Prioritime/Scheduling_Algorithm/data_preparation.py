@@ -48,7 +48,7 @@ def create_activities(user_id, task_list, all_free_time_blocks, session):
     return activities
 
 
-def data_preparation(user_id, task_list, begin_date, end_date, session):
+def data_preparation_3(user_id, task_list, begin_date, end_date, session):
     all_free_time_blocks = []
     current_date = begin_date
     preferences = mongoApi.find_preference(user_id, 'general', session=session)
@@ -94,7 +94,7 @@ def data_preparation(user_id, task_list, begin_date, end_date, session):
 
 
 # The version where the schedules are transferred and updated only at the end
-def data_preparation_3(user_id, task_list, begin_date, end_date, session, schedules=None):
+def data_preparation(user_id, task_list, begin_date, end_date, session, schedules=None):
     all_free_time_blocks = []
     current_date = begin_date
     preferences = mongoApi.find_preference(user_id, 'general', session=session)

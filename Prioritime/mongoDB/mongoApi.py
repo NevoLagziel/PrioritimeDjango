@@ -72,6 +72,17 @@ def get_user_info(user_id=None, email=None, fields=None, session=None):
     return user_info
 
 
+def update_user_info(user_id, updated_data, session):
+    user_id = ObjectId(user_id)
+    update_fields = {f"{key}": value for key, value in updated_data.items() if value is not None and len(value) > 0}
+    result = users.update_one(
+        {'_id': user_id},
+        {'$set': update_fields},
+        session=session
+    )
+    return result.modified_count > 0
+
+
 def get_calendar(user_id, session):
     user_id = ObjectId(user_id)
     full_calendar = users.find_one({"_id": user_id}, {'calendar': 1}, session=session)
@@ -324,7 +335,8 @@ def update_event(user_id, event_id, date, updated_data, session):
 
 def update_recurring_event(user_id, event_id, updated_data, session):
     user_id = ObjectId(user_id)
-    update_fields = {f"recurring_events.$[event].{key}": value for key, value in updated_data.items() if value is not None}
+    update_fields = {f"recurring_events.$[event].{key}": value for key, value in updated_data.items() if
+                     value is not None}
     result = users.update_one(
         {"_id": ObjectId(user_id), "recurring_events._id": event_id},
         {"$set": update_fields},
@@ -453,7 +465,8 @@ def get_recurring_tasks(user_id, session):
 
 def update_recurring_task(user_id, task_id, updated_data, session):
     user_id = ObjectId(user_id)
-    update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items() if value is not None}
+    update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items() if
+                     value is not None}
     result = users.update_one(
         {"_id": ObjectId(user_id), "recurring_tasks._id": task_id},
         {"$set": update_fields},

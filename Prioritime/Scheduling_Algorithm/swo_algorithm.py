@@ -5,11 +5,13 @@ from datetime import datetime, timedelta
 def utility(activity, planned_start=None, prev_start=None):  # need to think and check the scoring
     score = 0
     current_date = datetime.now()
+    if planned_start == 0:
+        return score
 
-    if not planned_start:  # for calculating the estimated utility
+    if planned_start is None:  # for calculating the estimated utility
         planned_start = find_best_start_time(activity, prev_start)
 
-    if not planned_start:
+    if planned_start is None:
         return float('-inf')
 
     if activity.deadline and planned_start:
@@ -86,13 +88,12 @@ def find_best_start_time(activity, prev_start=None):
         # new added for handling prev start
         if prev_start is not None:
             if prev_start == start:
-                new_start = start + timedelta(minutes=activity.duration)
+                new_start = (start + timedelta(minutes=activity.duration))
                 if new_start <= end:
                     current_utility = utility(activity, new_start, prev_start)
                     if current_utility > best_utility:
                         best_start_time = new_start
                         best_utility = current_utility
-
 
     # If no preferred time is found, check all free blocks
     # if not best_st art_time:
@@ -144,6 +145,9 @@ def sort_promotions(x):
 
 def same_schedule_results(current_plan, prev_schedule):
     for task_id, task in prev_schedule.items():
+        if current_plan[task_id] is None:
+            return False
+
         current_start_time, current_end_time = current_plan[task_id]
         if task.start_time != current_start_time or task.end_time != current_end_time:
             return False
@@ -174,7 +178,7 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 
     activity_utilities = {
         activity.id: utility(activity,
-                             prev_start=prev_schedule[activity.id].start_time if prev_schedule is not None else None)
+                             prev_start=None if prev_schedule is None else prev_schedule[activity.id].start_time)
         for
         activity in activities}
 
@@ -183,7 +187,6 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
     # print('activity utilities: ', activity_utilities)
 
     base_pq = sorted(activities, key=lambda activity: -activity_utilities[activity.id])
-
     for _ in range(max_iterations):
         # resting the free time blocks of each activity
         for activity in activities:
@@ -211,8 +214,9 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 
         while pq:
             activity = pq.pop(0)
-            best_start_time = find_best_start_time(activity, prev_start=prev_schedule[
-                activity.id].start_time if prev_schedule is not None else None)
+            best_start_time = find_best_start_time(activity,
+                                                   prev_start=None if prev_schedule is None else prev_schedule[
+                                                       activity.id].start_time)
             if best_start_time:
                 planned_end = best_start_time + timedelta(minutes=activity.duration)
                 current_plan[activity.id] = (best_start_time, planned_end)
@@ -232,10 +236,9 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 
         # Calculate utility including penalties for unscheduled activities
         current_utility = sum(
-            utility(act, current_plan[act.id][0] if current_plan[act.id] else None) for act in activities)
+            utility(act, planned_start=current_plan[act.id][0] if current_plan[act.id] else 0, prev_start=None if prev_schedule is None else prev_schedule[act.id].start_time) for act in activities)
 
         penalty = -len(current_unscheduled_activities) * 20  # Adjust the penalty weight as needed
-
         # to make sure it would pick a different result
         if prev_schedule is not None:
             if same_schedule_results(current_plan, prev_schedule):

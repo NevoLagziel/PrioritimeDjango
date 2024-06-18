@@ -397,7 +397,7 @@ def add_task(request, user_id):
                 session.start_transaction()
 
                 task = dict_to_entities.create_new_task(user_id, request.data, session=session)
-                if not task:
+                if not task or task.deadline < datetime.now():
                     session.abort_transaction()
                     return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
 
@@ -528,14 +528,16 @@ def get_monthly_calendar(request, user_id, date):
 def edit_event(request, user_id, event_id, date):
     if request.method == 'PUT':
         data = dict_to_entities.organize_data_edit_event(request.data)
-        if not event_id:
-            return JsonResponse({'error': 'missing data'}, status=400)
-
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                new_date = datetime.fromisoformat(data.get('start_time'))
                 old_date = datetime.fromisoformat(date)
+                new_date = old_date if data.get('start_time') is None else datetime.fromisoformat(data.get('start_time'))
+                end_date = old_date if data.get('end_time') is None else datetime.fromisoformat(data.get('end_time'))
+                if new_date > end_date:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Start comes after end'}, status=400)
+
                 if mongo_utils.update_event(user_id, old_date, new_date, event_id, data, session=session):
                     session.commit_transaction()
                     return JsonResponse({'message': 'Event updated successfully'}, status=200)
@@ -545,7 +547,6 @@ def edit_event(request, user_id, event_id, date):
 
             except Exception as e:
                 session.abort_transaction()
-                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -614,22 +615,12 @@ def delete_task(request, user_id, task_id):
 @user_authorization
 def edit_task(request, user_id, task_id):
     if request.method == 'PUT':
-        # Extract the data from the request
-        # task_id = request.data.get('_id')
-        item_type = request.data.get('item_type')
-        updated_data = request.data
-        if not task_id:
-            return JsonResponse({'error': 'Missing required parameter: _id'}, status=400)
-
+        print(request.data)
+        updated_data = dict_to_entities.organize_data_edit_task(request.data)
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                if item_type == 'recurring task':
-                    result = mongoApi.update_recurring_task(user_id, task_id, updated_data, session=session)
-                else:
-                    result = mongoApi.update_task(user_id, task_id, updated_data, session=session)
-
-                if result:
+                if mongo_utils.update_task(user_id, task_id, updated_data, session=session):
                     session.commit_transaction()
                     return JsonResponse({'message': 'Task updated successfully'}, status=200)
                 else:
@@ -655,7 +646,6 @@ def get_task_list(request, user_id):
                     date = datetime.fromisoformat(date)
 
                 task_list = mongo_utils.get_task_list(user_id, date, session=session)
-                print(task_list)
                 if task_list:
                     session.commit_transaction()
                     return JsonResponse(task_list)

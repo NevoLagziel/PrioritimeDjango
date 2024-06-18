@@ -1,4 +1,3 @@
-from Prioritime.Model_Logic import calendar_objects
 from Prioritime.mongoDB import mongoApi, mongo_utils
 from Prioritime.Model_Logic import dict_to_entities
 from datetime import datetime, timedelta
@@ -35,7 +34,8 @@ def schedule_tasks(user_id, list_of_task_ids, start_date, end_date, session):
     if filtered_task_list is None or len(filtered_task_list) == 0:
         return False
 
-    activities = data_preparation.data_preparation(user_id, filtered_task_list, start_date, end_date, session=session)
+    activities = data_preparation.data_preparation(user_id=user_id, task_list=filtered_task_list, begin_date=start_date,
+                                                   end_date=end_date, session=session)
     if len(activities) == 0:
         return False
 
@@ -116,7 +116,6 @@ def re_schedule_tasks(user_id, date, session):
     if len(activities) == 0:
         return False
 
-    print('here')
     prev_schedule = data_preparation.arrange_prev_schedule(task_list)
     best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities=activities, prev_schedule=prev_schedule)
     print(best_plan, unscheduled_activities)
@@ -160,7 +159,8 @@ def remove_all_scheduled_tasks_from_schedule(user_id, start_date, end_date, sess
             return None, None
 
         tasks_removed = 0
-        for event in schedule.event_list:
+        event_list = schedule.event_list.copy()
+        for event in event_list:
             if event.item_type == 'task':
                 schedule.event_list.remove(event)
                 task_list.append(event)

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import time
 from bson import ObjectId
 
@@ -75,7 +75,8 @@ class Task(CalendarItem):
         task_dict['priority'] = self.priority
         task_dict['deadline'] = self.deadline if self.deadline is None else self.deadline.isoformat()
         task_dict['status'] = self.status
-        task_dict['previous_done'] = self.previous_done if self.previous_done is None else self.previous_done.isoformat()
+        task_dict[
+            'previous_done'] = self.previous_done if self.previous_done is None else self.previous_done.isoformat()
         task_dict['start_time'] = self.start_time if self.start_time is None else self.start_time.isoformat()
         task_dict['end_time'] = self.end_time if self.end_time is None else self.end_time.isoformat()
         task_dict['item_type'] = self.item_type
@@ -104,6 +105,28 @@ class Task(CalendarItem):
             status='pending',
         )
         return new_task
+
+    def __str__(self):
+        return (f"\n"
+                f"ID: {self._id}\n"
+                f"Name: {self.name}\n"
+                f"Description: {self.description}\n"
+                f"Start time: {self.start_time}\n"
+                f"End time: {self.end_time}\n"
+                f"Duration: {self.duration}\n"
+                f"Status: {self.status}\n"
+                f"Type: {self.item_type}\n")
+
+    def __repr__(self):
+        return (f"\n"
+                f"ID: {self._id}\n"
+                f"Name: {self.name}\n"
+                f"Description: {self.description}\n"
+                f"Start time: {self.start_time}\n"
+                f"End time: {self.end_time}\n"
+                f"Duration: {self.duration}\n"
+                f"Status: {self.status}\n"
+                f"Type: {self.item_type}\n")
 
 
 class Tasks:
@@ -195,6 +218,11 @@ class Schedule:
         if self.start_time is not None:
             s_time = datetime.strptime(self.start_time, "%H:%M:%S")
             start_time = start_time.replace(hour=s_time.hour, minute=s_time.minute, second=s_time.second)
+
+        # added for making sure scheduled after current time
+        now = (datetime.now() + timedelta(minutes=5)).replace(second=0, microsecond=0)
+        if start_time < now:
+            start_time = now
 
         if self.end_time is not None:
             e_time = datetime.strptime(self.end_time, "%H:%M:%S")

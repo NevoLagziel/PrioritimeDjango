@@ -93,7 +93,7 @@ def create_new_task(user_id, data, session):
     if 'name' not in data:
         return None
 
-    name = data.get('name')  # string
+    name = data.get('name').replace('.', '')  # string
     status = data.get('status')  # filled by default
     frequency = data.get('frequency')  # filled by default
     if (frequency == 'Once' and len(data.keys()) == 3) or (frequency is None and len(data.keys()) == 2):
@@ -137,7 +137,7 @@ def create_new_event(data):
 
     event = calendar_objects.Event(
         _id=data.get('_id'),
-        name=data.get('name'),
+        name=data.get('name').replace('.', ''),
         description=data.get('description'),
         duration=data.get('duration'),
         frequency=data.get('frequency'),
@@ -166,6 +166,7 @@ def organize_data_edit_event(data):
         'location': data.get('location'),
         'frequency': data.get('frequency'),
         'reminders': data.get('reminders'),
+        'creation_date': data.get('creation_date'),
         'sub_event': data.get('sub_event')
     }
     if organized_data.get('start_time'):
@@ -174,4 +175,25 @@ def organize_data_edit_event(data):
     if organized_data.get('end_time'):
         organized_data['end_time'] = organized_data.get('end_time').split('.')[0]
 
+    return organized_data
+
+
+def organize_data_edit_task(data):
+    organized_data = {
+        '_id': data.get('id') or data.get('_id'),
+        'name': data.get('title') or data.get('name'),
+        'category': data.get('category'),
+        'tags': data.get('tags'),
+        'duration': data.get('duration'),
+        'item_type': data.get('type') or data.get('item_type'),
+        'description': data.get('description'),
+        'location': data.get('location'),
+        'frequency': data.get('frequency'),
+        'creation_date': data.get('creation_date'),
+        'deadline': data.get('deadline'),
+        'status': data.get('status'),
+        'previous_done': data.get('previous_done'),
+        'priority': data.get('priority'),
+        'reminders': data.get('reminders'),
+    }
     return organized_data

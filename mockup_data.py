@@ -35,13 +35,13 @@ def generate_random_events(num_events):
         recurring = random.choices(recurrence_options, weights=recurrence_weights, k=1)[0]
         events.append({
             "_id": str(ObjectId()),
-            "name": fake.sentence(nb_words=3),
+            "name": fake.sentence(nb_words=3).replace('.', ''),
             "description": fake.text(),
             "start_time": start_datetime.isoformat(),
             "end_time": end_datetime.isoformat(),
             "duration": duration,
             "location": fake.address(),
-            "category": random.choice(["work", "personal", "health", "other"]),
+            "category": random.choice(["Work", "Personal", "Health", "Workout", "Home", "Clean"]),
             "frequency": recurring,
             "tags": [fake.word() for _ in range(random.randint(1, 3))],
             "reminders": random.randint(1, 60),
@@ -62,13 +62,13 @@ def generate_random_tasks(num_tasks):
         recurring = random.choices(recurrence_options, weights=recurrence_weights, k=1)[0]
         tasks.append({
             "_id": str(ObjectId()),
-            "name": fake.sentence(nb_words=3),
+            "name": fake.sentence(nb_words=3).replace('.', ''),
             "description": fake.text(),
             "start_time": None,
             "end_time": None,
             "duration": random.randint(30, 500),
             "frequency": recurring,
-            "category": random.choice(["work", "personal", "health", "other"]),
+            "category": random.choice(["Work", "Personal", "Health", "Workout", "Home", "Clean"]),
             "tags": [fake.word() for _ in range(random.randint(1, 3))],
             "reminders": random.randint(1, 60),
             "location": fake.address(),

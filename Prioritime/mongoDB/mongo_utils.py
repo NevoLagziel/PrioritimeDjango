@@ -146,7 +146,8 @@ def is_recurring_on_date(recurring_event, target_date):
                     return True
 
         else:
-            first_appearance = datetime(year=first_appearance.year, month=first_appearance.month, day=first_appearance.day)
+            first_appearance = datetime(year=first_appearance.year, month=first_appearance.month,
+                                        day=first_appearance.day)
             delta_days = (target_date - first_appearance).days
             if recurrence_pattern == 'Every Week':
                 return delta_days % 7 == 0
@@ -196,14 +197,14 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
                     return True
 
         else:
-            if old_date.date() != new_date.date():
-                updated_data['first_appearance'] = new_date.isoformat()
+            updated_data['first_appearance'] = new_date.isoformat()
 
             if mongoApi.update_recurring_event(user_id, event_id, updated_data, session=session):
                 return True
 
     else:
-        change_to_recurring = False if updated_data.get('frequency') == 'Once' or updated_data.get('frequency') is None else True
+        change_to_recurring = False if updated_data.get('frequency') == 'Once' or updated_data.get(
+            'frequency') is None else True
         if old_date.date() == new_date.date() and not change_to_recurring:
             if mongoApi.update_event(user_id, event_id, old_date, updated_data, session=session):
                 return True
@@ -232,9 +233,48 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
     return False
 
 
+def update_task(user_id, task_id, updated_data, session):
+    item_type = updated_data.get('item_type')
+    if item_type == 'recurring task':
+        if updated_data.get('frequency') == 'Once':
+            task_dict = get_recurring_task(user_id, task_id, session=session)
+            if task_dict is None:
+                return False
+
+            task_dict.update(updated_data)
+            task_dict['item_type'] = 'task'
+            task = dict_to_entities.dict_to_task(task_dict)
+            if mongoApi.delete_recurring_task(user_id, task_id, session=session):
+                if mongoApi.add_task(user_id, task, session=session):
+                    return True
+
+        else:
+            if mongoApi.update_recurring_task(user_id, task_id, updated_data, session=session):
+                return True
+
+    else:
+        if updated_data.get('frequency') == 'Once' or updated_data.get('frequency') is None:
+            if mongoApi.update_task(user_id, task_id, updated_data, session=session):
+                return True
+
+        else:
+            task_dict = get_task(user_id, task_id, session=session)
+            if task_dict is None:
+                return False
+
+            task_dict.update(updated_data)
+            task = dict_to_entities.dict_to_task(task_dict)
+            task.item_type = 'recurring task'
+            task.previous_done = None
+            if mongoApi.delete_task(user_id, task_id, session=session):
+                if mongoApi.add_recurring_task(user_id, task, session=session):
+                    return True
+
+        return False
+
+
 def get_task_list(user_id, deadline=None, session=None):
     if not insert_recurring_tasks_to_task_list(user_id, session=session):
-        print('problem')
         return None
 
     task_list_dict = mongoApi.get_task_list(user_id, session=session)
@@ -308,5 +348,31 @@ def get_recurring_event(user_id, event_id, session):
     for event in recurring_events:
         if event['_id'] == event_id:
             return event
+
+    return None
+
+
+def get_recurring_task(user_id, task_id, session):
+    recurring_tasks = mongoApi.get_recurring_tasks(user_id, session=session)
+    if not recurring_tasks:
+        return None
+
+    recurring_tasks = recurring_tasks['recurring_tasks']
+    for task in recurring_tasks:
+        if task['_id'] == task_id:
+            return task
+
+    return None
+
+
+def get_task(user_id, task_id, session):
+    tasks = mongoApi.get_task_list(user_id, session=session)
+    if not tasks:
+        return None
+
+    tasks = tasks['task_list']
+    for task in tasks:
+        if task['_id'] == task_id:
+            return task
 
     return None

@@ -99,12 +99,12 @@ def generate_random_user(num_events=2, num_tasks=3):
         'task_list': [],
         'recurring_events': [],
         'recurring_tasks': [],
-        'preferences': {
-            'general': {
-                'start_time': time(hour=8).isoformat(),
-                'end_time': time(hour=20).isoformat(),
-            }
-        },
+        'user_preferences': {
+            'preferences': {},
+            'days_off': [],
+            'start_time': time(hour=8).isoformat(),
+            'end_time': time(hour=20).isoformat(),
+        }
     }
 
     current_year = datetime.now().year

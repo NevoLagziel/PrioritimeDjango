@@ -9,7 +9,7 @@ urlpatterns = [
     path('api/get_user_info', views.get_user_info, name='get_user_info'),  # GET
     path('api/update_user_info', views.update_user_info, name='update_user_info'),  # PUT
     path('api/delete_user/', views.delete_user, name='delete_user'),  # DELETE
-    path('api/get_preferences', views.get_preferences, name='get_preferences'),  # GET
-    path('api/update_preferences/', views.update_preferences, name='update_preferences'),  # PUT
+    path('api/get_preferences/', views.get_preferences, name='get_preferences'),  # GET
+    path('api/update_preferences', views.update_preferences, name='update_preferences'),  # PUT
     path('api/set_day_off/<str:date>', views.set_day_off, name='set_day_off'),  # PUT
 ]

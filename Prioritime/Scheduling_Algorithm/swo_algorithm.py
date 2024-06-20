@@ -5,11 +5,11 @@ from datetime import datetime, timedelta
 def utility(activity, planned_start=None, prev_start=None):  # need to think and check the scoring
     score = 0
     current_date = datetime.now()
-    if planned_start == 0:
-        return score
-
     if planned_start is None:  # for calculating the estimated utility
         planned_start = find_best_start_time(activity, prev_start)
+
+    if planned_start == 0:
+        return score
 
     if planned_start is None:
         return float('-inf')

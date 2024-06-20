@@ -12,9 +12,9 @@ from rest_framework.decorators import api_view
 
 from db_connection import db, client
 from .mongoDB import mongoApi, mongo_utils
-from .Model_Logic import dict_to_entities
+from .Model_Logic import dict_to_entities, user_preferences
 from . import utils
-from .Scheduling_Algorithm.automatic_scheduling import re_schedule_tasks, schedule_tasks, schedule_single_task
+from .Scheduling_Algorithm.automatic_scheduling import re_schedule_tasks, schedule_tasks, schedule_tasks_by_id_list
 
 users_collection = db['users']
 
@@ -57,6 +57,7 @@ def user_authorization(view_func):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return wrapper
@@ -95,12 +96,12 @@ def register(request):
                         'task_list': [],
                         'recurring_events': [],
                         'recurring_tasks': [],
-                        'preferences': {
-                            'general': {
-                                'start_time': time(hour=8).isoformat(),
-                                'end_time': time(hour=20).isoformat(),
-                            }
-                        },
+                        'user_preferences': {
+                            'preferences': {},
+                            'days_off': [],
+                            'start_time': time(hour=8).isoformat(),
+                            'end_time': time(hour=20).isoformat(),
+                        }
                     }
 
                     # Insert user document into MongoDB
@@ -120,6 +121,7 @@ def register(request):
 
                 except Exception as e:
                     session.abort_transaction()
+                    print(str(e))
                     return JsonResponse({'error': str(e)}, status=500)
         else:
             return JsonResponse({'error': 'Email and password are required'}, status=400)
@@ -162,6 +164,7 @@ def confirm_email(request, token):
 
         except Exception as e:
             session.abort_transaction()
+            print(str(e))
             return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -198,6 +201,7 @@ def resend_confirmation_email(request):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -234,6 +238,7 @@ def login(request):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -257,6 +262,7 @@ def get_user_info(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -280,6 +286,7 @@ def update_user_info(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -302,6 +309,7 @@ def delete_user(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -325,6 +333,7 @@ def get_schedule(request, user_id, date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
@@ -349,6 +358,7 @@ def get_date_range_schedules(request, user_id, start_date, end_date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
@@ -383,6 +393,7 @@ def add_event(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
@@ -416,10 +427,62 @@ def add_task(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
 
+
+# @api_view(['POST'])
+# @user_authorization
+# def add_task_and_automate(request, user_id):
+#     if request.method == 'POST':
+#         with client.start_session() as session:
+#             try:
+#                 session.start_transaction()
+#
+#                 task = dict_to_entities.create_new_task(user_id, request.data, session=session)
+#                 if not task:
+#                     session.abort_transaction()
+#                     return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
+#
+#                 if task.frequency == "Once" or task.frequency is None:
+#                     result = mongoApi.add_task(user_id, task, session=session)
+#                     if result:
+#                         end_time = task.deadline if task.deadline is not None else (
+#                                 datetime.today() + timedelta(days=7))
+#                         if schedule_single_task(user_id, task, datetime.today(), end_time, session=session):
+#                             session.commit_transaction()
+#                             return JsonResponse({'message': 'Task created successfully and scheduled!'}, status=201)
+#                         else:
+#                             session.abort_transaction()
+#                             return JsonResponse({'error': 'task could not be scheduled'}, status=400)
+#                     else:
+#                         session.abort_transaction()
+#                         return JsonResponse({'error': 'failed to add new task'}, status=400)
+#                 else:
+#                     current_date = datetime(year=datetime.now().year, month=datetime.now().month,
+#                                             day=datetime.now().day)
+#                     deadline = mongo_utils.find_deadline_for_next_recurring_task(task, current_date)
+#                     task_instance = task.generate_recurring_instance(deadline)
+#                     task.previous_done = deadline
+#                     result = mongoApi.add_recurring_task(user_id, task, session=session)
+#                     if result:
+#                         if schedule_single_task(user_id, task_instance, datetime.today(), deadline, session=session):
+#                             session.commit_transaction()
+#                             return JsonResponse({'message': 'Task created successfully and scheduled!'}, status=201)
+#                         else:
+#                             session.abort_transaction()
+#                             return JsonResponse({'error': 'task could not be scheduled'}, status=400)
+#                     else:
+#                         session.abort_transaction()
+#                         return JsonResponse({'error': 'failed to add new task'}, status=400)
+#
+#             except Exception as e:
+#                 session.abort_transaction()
+#                 return JsonResponse({'error': str(e)}, status=500)
+#
+#     return JsonResponse({'error': 'wrong request'}, status=400)
 
 @api_view(['POST'])
 @user_authorization
@@ -428,46 +491,21 @@ def add_task_and_automate(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-
-                task = dict_to_entities.create_new_task(user_id, request.data, session=session)
-                if not task:
+                data = request.data
+                task, end_time = mongo_utils.add_task_and_automate(user_id, data, session=session)
+                if task is None or end_time is None:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
+                    return JsonResponse({'error': 'task could not be added'}, status=400)
 
-                if task.frequency == "Once" or task.frequency is None:
-                    result = mongoApi.add_task(user_id, task, session=session)
-                    if result:
-                        end_time = task.deadline if task.deadline is not None else (
-                                datetime.today() + timedelta(days=7))
-                        if schedule_single_task(user_id, task, datetime.today(), end_time, session=session):
-                            session.commit_transaction()
-                            return JsonResponse({'message': 'Task created successfully and scheduled!'}, status=201)
-                        else:
-                            session.abort_transaction()
-                            return JsonResponse({'error': 'task could not be scheduled'}, status=400)
-                    else:
-                        session.abort_transaction()
-                        return JsonResponse({'error': 'failed to add new task'}, status=400)
-                else:
-                    current_date = datetime(year=datetime.now().year, month=datetime.now().month,
-                                            day=datetime.now().day)
-                    deadline = mongo_utils.find_deadline_for_next_recurring_task(task, current_date)
-                    task_instance = task.generate_recurring_instance(deadline)
-                    task.previous_done = deadline
-                    result = mongoApi.add_recurring_task(user_id, task, session=session)
-                    if result:
-                        if schedule_single_task(user_id, task_instance, datetime.today(), deadline, session=session):
-                            session.commit_transaction()
-                            return JsonResponse({'message': 'Task created successfully and scheduled!'}, status=201)
-                        else:
-                            session.abort_transaction()
-                            return JsonResponse({'error': 'task could not be scheduled'}, status=400)
-                    else:
-                        session.abort_transaction()
-                        return JsonResponse({'error': 'failed to add new task'}, status=400)
+                if not schedule_tasks(user_id, [task], datetime.today(), end_time, session=session):
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'could not schedule the added task'}, status=400)
 
+                session.commit_transaction()
+                return JsonResponse({'message': 'Task created and scheduled successfully!'}, status=200)
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
@@ -495,6 +533,7 @@ def get_event(request, user_id, date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
@@ -518,6 +557,7 @@ def get_monthly_calendar(request, user_id, date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'wrong request'}, status=400)
@@ -532,7 +572,8 @@ def edit_event(request, user_id, event_id, date):
             try:
                 session.start_transaction()
                 old_date = datetime.fromisoformat(date)
-                new_date = old_date if data.get('start_time') is None else datetime.fromisoformat(data.get('start_time'))
+                new_date = old_date if data.get('start_time') is None else datetime.fromisoformat(
+                    data.get('start_time'))
                 end_date = old_date if data.get('end_time') is None else datetime.fromisoformat(data.get('end_time'))
                 if new_date > end_date:
                     session.abort_transaction()
@@ -547,6 +588,7 @@ def edit_event(request, user_id, event_id, date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -576,6 +618,7 @@ def delete_event(request, user_id, event_id, date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -606,6 +649,7 @@ def delete_task(request, user_id, task_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -615,7 +659,6 @@ def delete_task(request, user_id, task_id):
 @user_authorization
 def edit_task(request, user_id, task_id):
     if request.method == 'PUT':
-        print(request.data)
         updated_data = dict_to_entities.organize_data_edit_task(request.data)
         with client.start_session() as session:
             try:
@@ -629,6 +672,7 @@ def edit_task(request, user_id, task_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -655,6 +699,7 @@ def get_task_list(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -678,6 +723,7 @@ def get_recurring_tasks(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
@@ -690,30 +736,34 @@ def get_preferences(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                preferences = mongoApi.get_preferences(user_id, session=session)
+                preferences = mongoApi.get_user_preferences(user_id, session=session)
+                preferences = user_preferences.PreferenceManager(**preferences)
                 if preferences:
                     session.commit_transaction()
-                    return JsonResponse(preferences)
+                    return JsonResponse(preferences.dict_for_json())
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Problem loading data'}, status=400)
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
-@api_view(['PUT'])
+@api_view(['POST'])
 @user_authorization
 def update_preferences(request, user_id):
-    if request.method == 'PUT':
-        preference = request.data.get('preference')
+    if request.method == 'POST':
+        data = request.data
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                result = mongoApi.update_preferences(user_id, preference, session=session)
+                preference_manager = dict_to_entities.dict_to_preferences(data)
+                print(data)
+                result = mongoApi.update_preferences(user_id, preference_manager, session=session)
                 if result:
                     session.commit_transaction()
                     return JsonResponse({'message': 'Preferences updated successfully'}, status=200)
@@ -722,6 +772,7 @@ def update_preferences(request, user_id):
                     return JsonResponse({'error': 'Problem updating preference'}, status=400)
 
             except Exception as e:
+                print(str(e))
                 session.abort_transaction()
                 return JsonResponse({'error': str(e)}, status=500)
 
@@ -746,28 +797,33 @@ def set_day_off(request, user_id, date):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
+# TODO for the next 30 days
 @api_view(['POST'])
 @user_authorization
 def automatic_scheduling(request, user_id):
     if request.method == 'POST':
         start_date = request.data.get('start_date')
         end_date = request.data.get('end_date')
-        tasks_id_list = request.data.get('tasks_id_list')
-
-        if not start_date or not end_date or not tasks_id_list:
+        tasks_id_list = request.data.get('tasks')
+        if not tasks_id_list:
             return JsonResponse({'error': 'Missing parameters'}, status=400)
-
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                start_date = datetime.fromisoformat(start_date)
-                end_date = datetime.fromisoformat(end_date)
-                if schedule_tasks(user_id, tasks_id_list, start_date, end_date, session=session):
+                if not start_date or not end_date:
+                    start_date = datetime.today()
+                    end_date = start_date + timedelta(days=30)
+                else:
+                    start_date = datetime.fromisoformat(start_date)
+                    end_date = datetime.fromisoformat(end_date)
+
+                if schedule_tasks_by_id_list(user_id, tasks_id_list, start_date, end_date, session=session):
                     session.commit_transaction()
                     return JsonResponse({'message': 'Tasks scheduled successfully'}, status=200)
                 else:
@@ -776,32 +832,71 @@ def automatic_scheduling(request, user_id):
 
             except Exception as e:
                 session.abort_transaction()
+                print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
+# @api_view(['POST'])
+# @user_authorization
+# def re_automate(request, user_id, date):
+#     if request.method == 'POST':
+#         if len(date) == 7:
+#             date = datetime.strptime(date, "%Y-%m")
+#             full_date = {'year': date.year,
+#                          'month': date.month,
+#                          'day': None}
+#         elif len(date) == 10:
+#             date = datetime.fromisoformat(date)
+#             full_date = {'year': date.year,
+#                          'month': date.month,
+#                          'day': date.day}
+#         else:
+#             return JsonResponse({'error': 'Wrong date'}, status=500)
+#
+#         with client.start_session() as session:
+#             try:
+#                 session.start_transaction()
+#                 if re_schedule_tasks(user_id, full_date, session=session):
+#                     session.commit_transaction()
+#                     return JsonResponse({'message': 'Tasks scheduled successfully'}, status=200)
+#                 else:
+#                     session.abort_transaction()
+#                     return JsonResponse({'error': 'Could not schedule tasks!'}, status=500)
+#
+#             except Exception as e:
+#                 session.abort_transaction()
+#                 print(str(e))
+#                 return JsonResponse({'error': str(e)}, status=500)
+#
+#     return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+
 @api_view(['POST'])
 @user_authorization
-def re_automate(request, user_id, date):
+def re_automate(request, user_id):
     if request.method == 'POST':
-        if len(date) == 7:
-            date = datetime.strptime(date, "%Y-%m")
-            full_date = {'year': date.year,
-                         'month': date.month,
-                         'day': None}
-        elif len(date) == 10:
-            date = datetime.fromisoformat(date)
-            full_date = {'year': date.year,
-                         'month': date.month,
-                         'day': date.day}
-        else:
-            return JsonResponse({'error': 'Wrong date'}, status=500)
-
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                if re_schedule_tasks(user_id, full_date, session=session):
+                month = request.GET.get('month')
+                date = request.GET.get('date')
+
+                if month is None and date is None:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Missing params!'}, status=400)
+
+                if month is not None and date is not None:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Cant reschedule month and date, pick one!'}, status=400)
+
+                if month is not None:
+                    month = datetime.strptime(month, "%Y-%m")
+                elif date is not None:
+                    date = datetime.fromisoformat(date)
+
+                if re_schedule_tasks(user_id, session=session, month=month, date=date):
                     session.commit_transaction()
                     return JsonResponse({'message': 'Tasks scheduled successfully'}, status=200)
                 else:

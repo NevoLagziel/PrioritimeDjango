@@ -1,4 +1,4 @@
-from Prioritime.Model_Logic import calendar_objects
+from Prioritime.Model_Logic import calendar_objects, user_preferences
 from Prioritime.mongoDB import mongoApi
 
 
@@ -97,11 +97,11 @@ def create_new_task(user_id, data, session):
     status = data.get('status')  # filled by default
     frequency = data.get('frequency')  # filled by default
     if (frequency == 'Once' and len(data.keys()) == 3) or (frequency is None and len(data.keys()) == 2):
-        preference = mongoApi.find_preference(user_id, name, session=session)
+        preferences_dict = mongoApi.get_user_preferences(user_id, session=session)
+        preference_manager = user_preferences.PreferenceManager(**preferences_dict)
+        preference = preference_manager.find_matching_preference(name)
         if preference:
-            preference = preference[name]
-            # crating task by the data in the preferences
-            fields = dict(preference['fields'])
+            fields = preference.fields
             task = calendar_objects.Task(name=name, status=status, **fields)
         else:
             # creating task with only name
@@ -175,6 +175,9 @@ def organize_data_edit_event(data):
     if organized_data.get('end_time'):
         organized_data['end_time'] = organized_data.get('end_time').split('.')[0]
 
+    if organized_data.get('name'):
+        organized_data['name'] = organized_data.get('name').replace('.', '')
+
     return organized_data
 
 
@@ -196,4 +199,33 @@ def organize_data_edit_task(data):
         'priority': data.get('priority'),
         'reminders': data.get('reminders'),
     }
+    if organized_data.get('name'):
+        organized_data['name'] = organized_data.get('name').replace('.', '')
+
     return organized_data
+
+
+def dict_to_preferences(data):
+    preferences = data.get('preferences')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+
+    if start_time is not None and len(start_time) == 5:
+        start_time = f"{start_time}:00"
+    if end_time is not None and len(start_time) == 5:
+        end_time = f"{end_time}:00"
+
+    preference_manager = user_preferences.PreferenceManager(
+        days_off=data.get('days_off'),
+        start_time=start_time,
+        end_time=end_time
+    )
+    for pref in preferences:
+        preference_manager.add_preference(
+            name=pref.get('name'),
+            days=pref.get('days'),
+            daytime=pref.get('daytime') or pref.get('timeOfDay'),
+            duration=pref.get('duration'),
+        )
+
+    return preference_manager

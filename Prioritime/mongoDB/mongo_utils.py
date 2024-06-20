@@ -25,7 +25,7 @@ def create_new_month(year, month):
     monthly_calendar = calendar_objects.MonthlyCalendar(
         month=month,
         number_of_days=num_of_days,
-        starting_day=calendar.monthrange(year, month)[0] + 1,
+        starting_day=(calendar.monthrange(year, month)[0] + 1 % 7),
         list_of_schedules=list_of_schedules
     )
     return monthly_calendar
@@ -34,7 +34,7 @@ def create_new_month(year, month):
 def create_new_schedule(year, month, day):
     schedule = calendar_objects.Schedule(
         date=day,
-        day=(calendar.weekday(year, month, day) + 1),
+        day=(calendar.weekday(year, month, day) + 1 % 7),
     )
     return schedule
 
@@ -376,3 +376,27 @@ def get_task(user_id, task_id, session):
             return task
 
     return None
+
+
+def add_task_and_automate(user_id, task_data, session):
+    task = dict_to_entities.create_new_task(user_id, task_data, session=session)
+    if not task:
+        return None, None
+
+    end_time = datetime.today() + timedelta(days=7)
+    if task.frequency == "Once" or task.frequency is None:
+        if not mongoApi.add_task(user_id, task, session=session):
+            return None, None
+
+        end_time = task.deadline if task.deadline is not None and task.deadline < end_time else end_time
+        return task, end_time
+    else:
+        current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
+        deadline = find_deadline_for_next_recurring_task(task, current_date)
+        task_instance = task.generate_recurring_instance(deadline)
+        task.previous_done = deadline
+        if not mongoApi.add_recurring_task(user_id, task, session=session):
+            return None, None
+
+        end_time = deadline if deadline < end_time else end_time
+        return task_instance, end_time

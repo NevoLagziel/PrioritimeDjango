@@ -546,11 +546,11 @@ def get_preferences(user_id, session):
     return preferences['preferences']
 
 
-def update_preferences(user_id, preference, session):
+def update_preferences(user_id, preference_manager, session):
     user_id = ObjectId(user_id)
     result = users.update_one(
         {'_id': user_id},
-        {'$set': {'preferences.' + preference['name']: preference}}
+        {'$set': {'user_preferences': preference_manager.__dict__()}}
         , session=session)
     return result.modified_count > 0
 
@@ -564,16 +564,27 @@ def delete_preference(user_id, preference, session):
     return result.modified_count > 0
 
 
-def find_preference(user_id, task_name, session):
+def get_user_preferences(user_id, session):
+    user_id = ObjectId(user_id)
+    user_preferences = users.find_one(
+        {'_id': user_id},
+        {
+            'user_preferences': 1,
+            '_id': 0
+        },
+        session=session
+    )
+    return user_preferences['user_preferences']
+
+
+def find_preferences(user_id, fields, session):
+    find_fields = {f'user_preferences.{field}': 1 for field in fields}
     user_id = ObjectId(user_id)
     preference = users.find_one(
         {'_id': user_id},
-        {
-            f'preferences.{task_name}': 1,
-            '_id': 0
-        }
+        find_fields
         , session=session)
-    return preference['preferences']
+    return preference['user_preferences']
 
 
 def update_day_off(user_id, date, day_off, session):

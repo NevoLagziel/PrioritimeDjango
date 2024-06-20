@@ -1,6 +1,9 @@
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+from enum import Enum
+
 from faker import Faker
+
 fake = Faker()
 
 # Generate a new random secret key
@@ -45,7 +48,20 @@ from pprint import pformat
 my_dict = {'name': 'Alice', 'age': 30, 'city': 'Wonderland'}
 print(pformat(my_dict))
 
+print(datetime.today().replace(hour=0, minute=0, second=0, microsecond=0))
 
 
 
 
+
+class Day(Enum):
+    Sunday = 0
+    Monday = 1
+    Tuesday = 2
+    Wednesday = 3
+    Thursday = 4
+    Friday = 5
+    Saturday = 6
+
+
+print(Day(3).name)

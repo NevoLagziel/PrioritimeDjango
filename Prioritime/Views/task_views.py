@@ -79,9 +79,7 @@ def delete_task(request, user_id, task_id):
 @user_authorization
 def edit_task(request, user_id, task_id):
     if request.method == 'PUT':
-        #print(request.data)
         updated_data = dict_to_entities.organize_data_edit_task(request.data)
-        print(updated_data)
         with client.start_session() as session:
             try:
                 session.start_transaction()
@@ -113,6 +111,8 @@ def get_task_list(request, user_id):
 
                 task_list = mongo_utils.get_task_list(user_id, date, session=session)
                 if task_list:
+                    # Added for Amit
+                    task_list['tasks_count'] = len(task_list['task_list'])
                     session.commit_transaction()
                     return JsonResponse(task_list, status=200)
                 else:
@@ -137,6 +137,7 @@ def get_recurring_tasks(request, user_id):
                 task_list = mongoApi.get_recurring_tasks(user_id, session=session)
 
                 if task_list is not None:
+                    task_list['tasks_count'] = len(task_list['recurring_tasks'])
                     session.commit_transaction()
                     return JsonResponse(task_list, status=200)
                 else:

@@ -106,6 +106,7 @@ def get_date_range_schedules(user_id, start_date, end_date, session):
         schedule = get_schedule(user_id, current_date, session=session)
         if schedule is None:
             return None
+
         schedules[str(current_date.date())] = schedule.__dict__()
         current_date = current_date + timedelta(days=1)
 

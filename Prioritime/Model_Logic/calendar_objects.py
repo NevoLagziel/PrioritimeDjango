@@ -199,6 +199,8 @@ class Schedule:
             'end_time': self.end_time,
             'event_list': dict_event_list,
             'day_off': self.day_off,
+            # added for Amit
+            'event_count': len(self.event_list)
         }
         return dict_schedule
 

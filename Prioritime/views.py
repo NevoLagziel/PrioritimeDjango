@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from functools import wraps
 
 from django.conf import settings
@@ -76,7 +76,7 @@ def register(request):
                     session.start_transaction()
                     if mongoApi.user_exists(email=email, session=session):
                         session.abort_transaction()
-                        return JsonResponse({'error': 'User with this email already exists'}, status=400)
+                        return JsonResponse({'error': 'User with this email already exists'}, status=409)
 
                     # Generate confirmation token
                     confirmation_token = str(uuid.uuid4())
@@ -84,31 +84,32 @@ def register(request):
                     # hash the password
                     hashed_password = make_password(password)
 
+                    user_data = utils.create_new_user(email, hashed_password, first_name, last_name, confirmation_token)
                     # Create user document
-                    user_data = {
-                        'firstName': first_name,
-                        'lastName': last_name,
-                        'email': email,
-                        'password': hashed_password,
-                        'confirmation_token': confirmation_token,
-                        'email_confirmed': False,
-                        'calendar': [],
-                        'task_list': [],
-                        'recurring_events': [],
-                        'recurring_tasks': [],
-                        'user_preferences': {
-                            'preferences': {},
-                            'days_off': [],
-                            'start_time': time(hour=8).isoformat(),
-                            'end_time': time(hour=20).isoformat(),
-                        }
-                    }
+                    # user_data = {
+                    #     'firstName': first_name,
+                    #     'lastName': last_name,
+                    #     'email': email,
+                    #     'password': hashed_password,
+                    #     'confirmation_token': confirmation_token,
+                    #     'email_confirmed': False,
+                    #     'calendar': [],
+                    #     'task_list': [],
+                    #     'recurring_events': [],
+                    #     'recurring_tasks': [],
+                    #     'user_preferences': {
+                    #         'preferences': {},
+                    #         'days_off': [],
+                    #         'start_time': time(hour=8).isoformat(),
+                    #         'end_time': time(hour=20).isoformat(),
+                    #     }
+                    # }
 
                     # Insert user document into MongoDB
                     _id = mongoApi.create_user(user_data, session=session)
                     if not _id:
                         session.abort_transaction()
-                        return JsonResponse({'error': 'Failed to create user'}, status=400)
+                        return JsonResponse({'error': 'Failed to create user'}, status=500)
 
                     # Generate JWT token
                     token = utils.generate_jwt_token(str(_id))
@@ -117,7 +118,7 @@ def register(request):
                     send_confirmation_email(email, confirmation_token)
 
                     session.commit_transaction()
-                    return JsonResponse({'token': token})
+                    return JsonResponse({'token': token}, status=201)
 
                 except Exception as e:
                     session.abort_transaction()
@@ -148,19 +149,18 @@ def confirm_email(request, token):
             session.start_transaction()
             confirmed = mongoApi.does_email_confirmed(token, session)
             if not confirmed:
-                return HttpResponse('Invalid confirmation token.')
+                return HttpResponse('Invalid confirmation token.', status=400)
 
             if confirmed['email_confirmed']:
-                return HttpResponse('Email already confirmed.')
+                return HttpResponse('Email already confirmed.', status=200)
 
             result = mongoApi.confirm_email(token, session)
             if result:
                 session.commit_transaction()
-                return HttpResponse('Your email has been confirmed successfully.')
+                return HttpResponse('Your email has been confirmed successfully.', status=200)
             else:
                 session.abort_transaction()
-                return HttpResponse('Could not confirm your email.\n'
-                                    'Please try again later.')
+                return HttpResponse('Could not confirm your email.\n''Please try again later.', status=500)
 
         except Exception as e:
             session.abort_transaction()
@@ -173,7 +173,7 @@ def resend_confirmation_email(request):
     if request.method == 'POST':
         email = request.data.get('email')
         if email is None:
-            return JsonResponse({'error': 'Email required'})
+            return JsonResponse({'error': 'Email required'}, status=400)
 
         with client.start_session() as session:
             try:
@@ -182,29 +182,29 @@ def resend_confirmation_email(request):
                     user_info = mongoApi.get_user_info(email=email, fields=['confirmation_token', 'email_confirmed'],
                                                        session=session)
                 else:
-                    return JsonResponse({'error': 'User does not exist.'})
+                    return JsonResponse({'error': 'User with this email does not exist.'}, status=404)
 
                 if not user_info:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'Problem loading data'})
+                    return JsonResponse({'error': 'Problem loading data'}, status=500)
 
                 email_confirmed = user_info['email_confirmed']
                 if email_confirmed:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'Email already confirmed'})
+                    return JsonResponse({'error': 'Email already confirmed'}, status=400)
 
                 confirmation_token = user_info['confirmation_token']
                 if confirmation_token:
                     send_confirmation_email(email, confirmation_token)
                     session.commit_transaction()
-                    return JsonResponse({'message': 'Confirmation email sent successfully.'})
+                    return JsonResponse({'message': 'Confirmation email sent successfully.'}, status=200)
 
             except Exception as e:
                 session.abort_transaction()
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['POST'])
@@ -213,7 +213,7 @@ def login(request):
         email = request.data.get('email')
         password = request.data.get('password')
         if not email or not password:
-            return JsonResponse({'error': 'Email and password are required'}, status=402)
+            return JsonResponse({'error': 'Email and password are required'}, status=400)
 
         with client.start_session() as session:
             try:
@@ -234,14 +234,14 @@ def login(request):
                         return JsonResponse({'error': 'Email not confirmed'}, status=401)
                 else:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'Invalid email or password'}, status=404)
+                    return JsonResponse({'error': 'Invalid email or password'}, status=400)
 
             except Exception as e:
                 session.abort_transaction()
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -265,7 +265,7 @@ def get_user_info(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['PUT'])
@@ -276,20 +276,25 @@ def update_user_info(request, user_id):
             try:
                 session.start_transaction()
                 updated_data = request.data
+                email = updated_data.get('email')
+                if not mongoApi.check_email_can_be_changed(user_id=user_id, email=email, session=session):
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'User with this email already exists'}, status=409)
+
                 result = mongoApi.update_user_info(user_id, updated_data, session=session)
                 if result:
                     session.commit_transaction()
                     return JsonResponse({'message': 'User details updated successfully'}, status=200)
                 else:
                     session.abort_transaction()
-                return JsonResponse({'error': 'Problem updating user'}, status=404)
+                return JsonResponse({'error': 'Problem updating user'}, status=400)
 
             except Exception as e:
                 session.abort_transaction()
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['DELETE'])
@@ -305,14 +310,14 @@ def delete_user(request, user_id):
                     return JsonResponse({'message': 'User deleted successfully'}, status=200)
                 else:
                     session.abort_transaction()
-                return JsonResponse({'error': 'Problem deleting user'}, status=404)
+                return JsonResponse({'error': 'Problem deleting user'}, status=500)
 
             except Exception as e:
                 session.abort_transaction()
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -326,7 +331,7 @@ def get_schedule(request, user_id, date):
                 schedule = mongo_utils.get_schedule(user_id, date, session=session)
                 if schedule:
                     session.commit_transaction()
-                    return JsonResponse(schedule.__dict__())
+                    return JsonResponse(schedule.__dict__(), status=200)
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Could not find schedule'}, status=404)
@@ -336,7 +341,7 @@ def get_schedule(request, user_id, date):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'wrong request'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -351,7 +356,7 @@ def get_date_range_schedules(request, user_id, start_date, end_date):
                 schedules = mongo_utils.get_date_range_schedules(user_id, start_date, end_date, session=session)
                 if schedules:
                     session.commit_transaction()
-                    return JsonResponse(schedules)
+                    return JsonResponse(schedules, status=200)
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Could not find schedules'}, status=404)
@@ -361,7 +366,7 @@ def get_date_range_schedules(request, user_id, start_date, end_date):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'wrong request'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['POST'])
@@ -377,7 +382,7 @@ def add_event(request, user_id):
                 if event.frequency == "Once" or event.frequency is None:
                     if mongoApi.add_event(user_id, event, date, session=session):
                         session.commit_transaction()
-                        return JsonResponse({'success': 'new event added successfully'}, status=200)
+                        return JsonResponse({'success': 'new event added successfully'}, status=201)
                     else:
                         session.abort_transaction()
                         return JsonResponse({'error': 'problem adding new event to database'}, status=500)
@@ -386,7 +391,7 @@ def add_event(request, user_id):
                     event.item_type = 'recurring event'
                     if mongoApi.add_recurring_event(user_id, event, session=session):
                         session.commit_transaction()
-                        return JsonResponse({'success': 'new event added successfully'}, status=200)
+                        return JsonResponse({'success': 'new event added successfully'}, status=201)
                     else:
                         session.abort_transaction()
                         return JsonResponse({'error': 'problem adding new event to database'}, status=500)
@@ -396,7 +401,7 @@ def add_event(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'wrong request'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['POST'])
@@ -420,17 +425,17 @@ def add_task(request, user_id):
 
                 if result:
                     session.commit_transaction()
-                    return JsonResponse({'message': 'Task created successfully'}, status=200)
+                    return JsonResponse({'message': 'Task created successfully'}, status=201)
                 else:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'task could not be added'}, status=400)
+                    return JsonResponse({'error': 'task could not be added'}, status=500)
 
             except Exception as e:
                 session.abort_transaction()
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'wrong request'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 # @api_view(['POST'])
@@ -508,7 +513,7 @@ def add_task_and_automate(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'wrong request'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -536,7 +541,7 @@ def get_event(request, user_id, date):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'wrong request'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -560,7 +565,7 @@ def get_monthly_calendar(request, user_id, date):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'wrong request'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['PUT'])
@@ -591,7 +596,7 @@ def edit_event(request, user_id, event_id, date):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['DELETE'])
@@ -621,7 +626,7 @@ def delete_event(request, user_id, event_id, date):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['DELETE'])
@@ -652,7 +657,7 @@ def delete_task(request, user_id, task_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['PUT'])
@@ -675,7 +680,7 @@ def edit_task(request, user_id, task_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -692,7 +697,7 @@ def get_task_list(request, user_id):
                 task_list = mongo_utils.get_task_list(user_id, date, session=session)
                 if task_list:
                     session.commit_transaction()
-                    return JsonResponse(task_list)
+                    return JsonResponse(task_list, status=200)
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Problem loading data'}, status=400)
@@ -702,7 +707,7 @@ def get_task_list(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -716,7 +721,7 @@ def get_recurring_tasks(request, user_id):
 
                 if task_list is not None:
                     session.commit_transaction()
-                    return JsonResponse(task_list)
+                    return JsonResponse(task_list, status=200)
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Problem loading data'}, status=400)
@@ -726,7 +731,7 @@ def get_recurring_tasks(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['GET'])
@@ -740,7 +745,7 @@ def get_preferences(request, user_id):
                 preferences = user_preferences.PreferenceManager(**preferences)
                 if preferences:
                     session.commit_transaction()
-                    return JsonResponse(preferences.dict_for_json())
+                    return JsonResponse(preferences.dict_for_json(), status=200)
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Problem loading data'}, status=400)
@@ -750,7 +755,7 @@ def get_preferences(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['POST'])
@@ -762,7 +767,6 @@ def update_preferences(request, user_id):
             try:
                 session.start_transaction()
                 preference_manager = dict_to_entities.dict_to_preferences(data)
-                print(data)
                 result = mongoApi.update_preferences(user_id, preference_manager, session=session)
                 if result:
                     session.commit_transaction()
@@ -776,7 +780,7 @@ def update_preferences(request, user_id):
                 session.abort_transaction()
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @api_view(['PUT'])
@@ -800,7 +804,7 @@ def set_day_off(request, user_id, date):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 # TODO for the next 30 days
@@ -835,7 +839,7 @@ def automatic_scheduling(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 # @api_view(['POST'])
@@ -908,4 +912,4 @@ def re_automate(request, user_id):
                 print(str(e))
                 return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)

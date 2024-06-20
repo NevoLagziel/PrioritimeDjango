@@ -7,13 +7,13 @@ class CalendarItem:
                  reminders=30, location=None, creation_date=None):
         self._id = _id if _id is not None else str(ObjectId())
         self.name = name
-        self.description = description
+        self.description = description if description is not None else ""
         self.duration = duration
-        self.frequency = frequency
-        self.category = category
-        self.tags = tags
+        self.frequency = frequency if frequency is not None else "Once"
+        self.category = category if category is not None else ""
+        self.tags = tags if tags is not None else []
         self.reminders = reminders
-        self.location = location
+        self.location = location if location is not None else ""
         self.creation_date = creation_date if creation_date is not None else datetime.now().isoformat()
 
     def __dict__(self):
@@ -105,27 +105,27 @@ class Task(CalendarItem):
         )
         return new_task
 
-    def __str__(self):
-        return (f"\n"
-                f"ID: {self._id}\n"
-                f"Name: {self.name}\n"
-                f"Description: {self.description}\n"
-                f"Start time: {self.start_time}\n"
-                f"End time: {self.end_time}\n"
-                f"Duration: {self.duration}\n"
-                f"Status: {self.status}\n"
-                f"Type: {self.item_type}\n")
-
-    def __repr__(self):
-        return (f"\n"
-                f"ID: {self._id}\n"
-                f"Name: {self.name}\n"
-                f"Description: {self.description}\n"
-                f"Start time: {self.start_time}\n"
-                f"End time: {self.end_time}\n"
-                f"Duration: {self.duration}\n"
-                f"Status: {self.status}\n"
-                f"Type: {self.item_type}\n")
+    # def __str__(self):
+    #     return (f"\n"
+    #             f"ID: {self._id}\n"
+    #             f"Name: {self.name}\n"
+    #             f"Description: {self.description}\n"
+    #             f"Start time: {self.start_time}\n"
+    #             f"End time: {self.end_time}\n"
+    #             f"Duration: {self.duration}\n"
+    #             f"Status: {self.status}\n"
+    #             f"Type: {self.item_type}\n")
+    #
+    # def __repr__(self):
+    #     return (f"\n"
+    #             f"ID: {self._id}\n"
+    #             f"Name: {self.name}\n"
+    #             f"Description: {self.description}\n"
+    #             f"Start time: {self.start_time}\n"
+    #             f"End time: {self.end_time}\n"
+    #             f"Duration: {self.duration}\n"
+    #             f"Status: {self.status}\n"
+    #             f"Type: {self.item_type}\n")
 
 
 class Tasks:
@@ -230,6 +230,8 @@ class Schedule:
         for event in self.event_list:
             if event.start_time > start_time:
                 free_times.append((start_time, event.start_time))
+                start_time = event.end_time
+            elif event.end_time > start_time:
                 start_time = event.end_time
 
         if start_time < end_time:

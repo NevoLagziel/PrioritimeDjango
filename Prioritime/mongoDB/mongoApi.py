@@ -1,7 +1,5 @@
 from bson import ObjectId
 from db_connection import db
-from Prioritime.Model_Logic import calendar_objects
-import calendar
 from . import mongo_utils
 
 users = db['users']  # users collection
@@ -70,6 +68,15 @@ def get_user_info(user_id=None, email=None, fields=None, session=None):
         user_info = users.find_one({'email': email}, projection, session=session)
 
     return user_info
+
+
+def check_email_can_be_changed(user_id, email, session):
+    user_info = get_user_info(email=email, fields=['_id'], session=session)
+    if user_info is not None:
+        if user_info['_id'] != ObjectId(user_id):
+            return False
+
+    return True
 
 
 def update_user_info(user_id, updated_data, session):

@@ -48,15 +48,15 @@ def schedule_tasks_by_id_list(user_id, list_of_task_ids, start_date, end_date, s
 def schedule_tasks(user_id, task_list, start_date, end_date, session, schedules=None, prev_schedule=None):
     if start_date > end_date or end_date < datetime.today().replace(hour=0, minute=0, second=0, microsecond=0):
         return False
-
+    print('hi')
     activities = data_preparation.data_preparation(user_id=user_id, task_list=task_list, begin_date=start_date, end_date=end_date, session=session, schedules=schedules)
     if len(activities) == 0:
         return False
 
-    print(activities)
     best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activities=activities, prev_schedule=prev_schedule)
     if best_plan is None:
         return False
+    print(best_plan, unscheduled_activities)
 
     if not update_tasks(user_id, task_list, best_plan, session=session):
         return False

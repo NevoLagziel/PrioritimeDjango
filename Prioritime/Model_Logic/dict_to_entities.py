@@ -1,5 +1,6 @@
-from Prioritime.Model_Logic import calendar_objects, user_preferences
-from Prioritime.mongoDB import mongoApi
+from ..Model_Logic import calendar_objects, user_preferences
+from ..mongoDB import mongoApi
+from ..utils import is_iso_date
 
 
 # From mongodb #
@@ -90,13 +91,22 @@ def dict_to_monthly_calendar(monthly_calendar_dict):
 
 def create_new_task(user_id, data, session):
     # must have at least a name
-    if 'name' not in data:
-        return None
-
+    auto_fill = True
     name = data.get('name').replace('.', '')  # string
     status = data.get('status')  # filled by default
     frequency = data.get('frequency')  # filled by default
-    if (frequency == 'Once' and len(data.keys()) == 3) or (frequency is None and len(data.keys()) == 2):
+    def_keys = ['name', 'status', 'frequency', 'type']
+    if 'name' not in data:
+        return None
+
+    for key in data.keys():
+        if key not in def_keys and data.get(key):
+            auto_fill = False
+
+    if frequency != 'Once' and frequency is not None:
+        auto_fill = False
+
+    if auto_fill:
         preferences_dict = mongoApi.get_user_preferences(user_id, session=session)
         preference_manager = user_preferences.PreferenceManager(**preferences_dict)
         preference = preference_manager.find_matching_preference(name)
@@ -193,9 +203,8 @@ def organize_data_edit_task(data):
         'location': data.get('location'),
         'frequency': data.get('frequency'),
         'creation_date': data.get('creation_date'),
-        'deadline': data.get('deadline'),
+        'deadline': data.get('deadline') if is_iso_date(data.get('deadline')) else None,
         'status': data.get('status'),
-        'previous_done': data.get('previous_done'),
         'priority': data.get('priority'),
         'reminders': data.get('reminders'),
     }
@@ -205,27 +214,47 @@ def organize_data_edit_task(data):
     return organized_data
 
 
+# def dict_to_preferences(data):
+#     copy_data = data.copy()
+#     preferences = data.get('preferences')
+#     start_time = data.get('start_time')
+#     end_time = data.get('end_time')
+#
+#     if start_time is not None and len(start_time) == 5:
+#         start_time = f"{start_time}:00"
+#     if end_time is not None and len(start_time) == 5:
+#         end_time = f"{end_time}:00"
+#
+#     copy_data['start_time'] = start_time
+#     copy_data['end_time'] = end_time
+#
+#     preference_manager = user_preferences.PreferenceManager(
+#         days_off=data.get('days_off'),
+#         start_time=start_time,
+#         end_time=end_time
+#     )
+#     for pref in preferences:
+#         preference_manager.add_preference(
+#             name=pref.get('name'),
+#             days=pref.get('days'),
+#             daytime=pref.get('daytime'),
+#             duration=pref.get('duration'),
+#         )
+#
+#     return preference_manager
+
 def dict_to_preferences(data):
-    preferences = data.get('preferences')
+    copy_data = data.copy()
     start_time = data.get('start_time')
     end_time = data.get('end_time')
 
     if start_time is not None and len(start_time) == 5:
         start_time = f"{start_time}:00"
-    if end_time is not None and len(start_time) == 5:
+    if end_time is not None and len(end_time) == 5:
         end_time = f"{end_time}:00"
 
-    preference_manager = user_preferences.PreferenceManager(
-        days_off=data.get('days_off'),
-        start_time=start_time,
-        end_time=end_time
-    )
-    for pref in preferences:
-        preference_manager.add_preference(
-            name=pref.get('name'),
-            days=pref.get('days'),
-            daytime=pref.get('daytime') or pref.get('timeOfDay'),
-            duration=pref.get('duration'),
-        )
+    copy_data['start_time'] = start_time
+    copy_data['end_time'] = end_time
 
+    preference_manager = user_preferences.PreferenceManager(**copy_data)
     return preference_manager

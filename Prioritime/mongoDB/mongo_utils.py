@@ -25,7 +25,7 @@ def create_new_month(year, month):
     monthly_calendar = calendar_objects.MonthlyCalendar(
         month=month,
         number_of_days=num_of_days,
-        starting_day=(calendar.monthrange(year, month)[0] + 1 % 7),
+        starting_day=((calendar.monthrange(year, month)[0] + 1) % 7),
         list_of_schedules=list_of_schedules
     )
     return monthly_calendar
@@ -34,7 +34,7 @@ def create_new_month(year, month):
 def create_new_schedule(year, month, day):
     schedule = calendar_objects.Schedule(
         date=day,
-        day=(calendar.weekday(year, month, day) + 1 % 7),
+        day=((calendar.weekday(year, month, day) + 1) % 7),
     )
     return schedule
 
@@ -253,7 +253,7 @@ def update_task(user_id, task_id, updated_data, session):
                 return True
 
     else:
-        if updated_data.get('frequency') == 'Once' or updated_data.get('frequency') is None:
+        if updated_data.get('frequency') == 'Once' or (not updated_data.get('frequency')):
             if mongoApi.update_task(user_id, task_id, updated_data, session=session):
                 return True
 

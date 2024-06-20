@@ -15,6 +15,24 @@ class Activity:
         self.preferred_days = preferred_days  # List of weekdays (e.g., [0, 2, 4])
         self.preferred_times = preferred_times  # List of tuples (start_time, end_time)
 
+    def __repr__(self):
+        return (f"\n"
+                f"ID: {self.id}\n"
+                f"Duration: {self.duration}\n"
+                f"Free time blocks: {self.free_blocks}\n"
+                f"Deadline: {self.deadline}\n"
+                f"Preferred days: {self.preferred_days}\n"
+                f"Preferred times: {self.preferred_times}\n")
+
+    def __str__(self):
+        return (f"\n"
+                f"ID: {self.id}\n"
+                f"Duration: {self.duration}\n"
+                f"Free time blocks: {self.free_blocks}\n"
+                f"Deadline: {self.deadline}\n"
+                f"Preferred days: {self.preferred_days}\n"
+                f"Preferred times: {self.preferred_times}\n")
+
 
 class DayPart(Enum):
     morning = (time(hour=8), time(hour=12))

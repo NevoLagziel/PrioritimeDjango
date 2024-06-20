@@ -1,6 +1,9 @@
 import secrets
+import calendar
 from datetime import datetime, timedelta, time
 from enum import Enum
+from Prioritime.Model_Logic import calendar_objects
+
 
 from faker import Faker
 
@@ -50,8 +53,10 @@ print(pformat(my_dict))
 
 print(datetime.today().replace(hour=0, minute=0, second=0, microsecond=0))
 
+arr = ['somthing', 'somthing', 'somthing', 'yes']
 
-
+print(type(arr) is list)
+print(list)
 
 
 class Day(Enum):
@@ -65,3 +70,10 @@ class Day(Enum):
 
 
 print(Day(3).name)
+
+
+print((calendar.monthrange(2024, 9)[0] + 1) % 7)
+
+task = calendar_objects.Task(name="name", reminders=None)
+
+print(task.__dict__())

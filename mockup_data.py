@@ -66,7 +66,7 @@ def generate_random_tasks(num_tasks):
             "description": fake.text(),
             "start_time": None,
             "end_time": None,
-            "duration": random.randint(30, 500),
+            "duration": random.randint(10, 120),
             "frequency": recurring,
             "category": random.choice(["Work", "Personal", "Health", "Workout", "Home", "Clean"]),
             "tags": [fake.word() for _ in range(random.randint(1, 3))],
@@ -161,6 +161,6 @@ def generate_random_user(num_events=2, num_tasks=3):
 # Generate and insert mockup data
 num_users = 1
 for _ in range(num_users):
-    random_user, printable_user = generate_random_user(10, 10)
+    random_user, printable_user = generate_random_user(20, 20)
     users.insert_one(random_user)
     print(json.dumps(printable_user, indent=4))

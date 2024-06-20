@@ -32,8 +32,12 @@ class PreferenceManager:
 
         preference_dict = {}
         if preferences is not None:
-            for key, value in preferences.items():
-                preference_dict[key] = Preference(**value)
+            if type(preferences) is list:
+                for value in preferences:
+                    preference_dict[value.get('name')] = Preference(**value)
+            else:
+                for key, value in preferences.items():
+                    preference_dict[key] = Preference(**value)
 
         self.preferences = preference_dict
         self.days_off = days_off if days_off is not None else []

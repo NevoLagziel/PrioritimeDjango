@@ -4,8 +4,8 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("", include("Prioritime.urls.schedule_urls")),
-    path("", include("Prioritime.urls.event_urls")),
-    path("", include("Prioritime.urls.user_urls")),
-    path("", include("Prioritime.urls.task_urls"))
+    path("api/", include("Prioritime.urls.schedule_urls")),
+    path("api/", include("Prioritime.urls.event_urls")),
+    path("api/", include("Prioritime.urls.user_urls")),
+    path("api/", include("Prioritime.urls.task_urls"))
 ]

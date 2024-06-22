@@ -12,21 +12,21 @@ def get_first_and_last_date_of_month(year, month):
     return first_date, last_date
 
 
-def schedule_single_task(user_id, task, start_date, end_date, session):
-    task_list = [task]  # in a list just so the algorithm could handle it
-    activity = data_preparation.data_preparation(user_id, task_list, start_date, end_date, session=session)
-    if len(activity) == 0:
-        return False
-
-    best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activity)
-    if best_plan is None:
-        return False
-
-    print(best_plan, unscheduled_activities)
-    if not update_tasks(user_id, task_list, best_plan, session=session):
-        return False
-
-    return True
+# def schedule_single_task(user_id, task, start_date, end_date, session):
+#     task_list = [task]  # in a list just so the algorithm could handle it
+#     activity = data_preparation.data_preparation(user_id, task_list, start_date, end_date, session=session)
+#     if len(activity) == 0:
+#         return False
+#
+#     best_plan, unscheduled_activities = swo_algorithm.schedule_activities(activity)
+#     if best_plan is None:
+#         return False
+#
+#     print(best_plan, unscheduled_activities)
+#     if not update_tasks(user_id, task_list, best_plan, session=session):
+#         return False
+#
+#     return True
 
 
 def schedule_tasks_by_id_list(user_id, list_of_task_ids, start_date, end_date, session):
@@ -39,16 +39,17 @@ def schedule_tasks_by_id_list(user_id, list_of_task_ids, start_date, end_date, s
     if filtered_task_list is None or len(filtered_task_list) == 0:
         return False
 
-    if not schedule_tasks(user_id, filtered_task_list, start_date, end_date, session=session):
+    results = schedule_tasks(user_id, filtered_task_list, start_date, end_date, session=session)
+    if not results:
         return False
 
-    return True
+    return results
 
 
 def schedule_tasks(user_id, task_list, start_date, end_date, session, schedules=None, prev_schedule=None):
     if start_date > end_date or end_date < datetime.today().replace(hour=0, minute=0, second=0, microsecond=0):
         return False
-    print('hi')
+
     activities = data_preparation.data_preparation(user_id=user_id, task_list=task_list, begin_date=start_date, end_date=end_date, session=session, schedules=schedules)
     if len(activities) == 0:
         return False
@@ -58,10 +59,11 @@ def schedule_tasks(user_id, task_list, start_date, end_date, session, schedules=
         return False
     print(best_plan, unscheduled_activities)
 
-    if not update_tasks(user_id, task_list, best_plan, session=session):
+    result = update_tasks(user_id, task_list, best_plan, session=session)
+    if not result:
         return False
 
-    return True
+    return result
 
 # FIXME scheduling tasks by id list function
 # def schedule_tasks(user_id, list_of_task_ids, start_date, end_date, session):
@@ -129,10 +131,11 @@ def re_schedule_tasks(user_id, session, month=None, date=None):
         return False
 
     prev_schedule = data_preparation.arrange_prev_schedule(task_list)
-    if not schedule_tasks(user_id, task_list, start_date, end_date, session=session, schedules=schedules, prev_schedule=prev_schedule):
+    results = schedule_tasks(user_id, task_list, start_date, end_date, session=session, schedules=schedules, prev_schedule=prev_schedule)
+    if not results:
         return False
 
-    return True
+    return results
 
 
 def remove_all_scheduled_tasks_from_schedule(user_id, start_date, end_date, session):
@@ -189,24 +192,28 @@ def remove_all_scheduled_tasks_from_schedule(user_id, start_date, end_date, sess
 #     return True
 
 def update_tasks(user_id, task_list, best_plan, session):
+    presenting_scheduled_tasks = []
+    keys = best_plan.keys()
     for task in task_list:
-        if best_plan[task.id()] is not None:
+        if task.id() in keys and best_plan[task.id()] is not None:
             start_time, end_time = best_plan[task.id()]
         else:
             start_time, end_time = None, None
+
+        presenting_scheduled_tasks.append({'name': task.name, 'start_time': start_time})
 
         result = False
         if task.status == 'scheduled':
             result = update_scheduled_task(user_id, task, start_time, end_time, session=session)
         elif task.status == 'pending':
             result = update_pending_task(user_id, task, start_time, end_time, session=session)
-        elif task.status == 'new':
+        elif task.status == 'active':
             result = update_new_task(user_id, task, start_time, end_time, session=session)
 
         if not result:
             return False
 
-    return True
+    return presenting_scheduled_tasks
 
 
 def update_scheduled_task(user_id, task, start_time, end_time, session):
@@ -242,10 +249,6 @@ def update_new_task(user_id, task, start_time, end_time, session):
     task.schedule(start_time=start_time, end_time=end_time)
     if task.status == 'scheduled':
         if not mongoApi.add_event(user_id, task, start_time, session=session):
-            return False
-
-    else:
-        if not mongoApi.add_task(user_id, task, session=session):
             return False
 
     return True

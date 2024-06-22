@@ -237,11 +237,15 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
 def update_task(user_id, task_id, updated_data, session):
     item_type = updated_data.get('item_type')
     if item_type == 'recurring task':
-        if updated_data.get('frequency') == 'Once':
-            task_dict = get_recurring_task(user_id, task_id, session=session)
-            if task_dict is None:
-                return False
+        task_dict = get_recurring_task(user_id, task_id, session=session)
+        if task_dict is None:
+            return False
 
+        mongoApi.delete_task(user_id=user_id, task_id=task_dict['last_instance'], session=session)
+        updated_data['last_instance'] = None
+        updated_data['previous_done'] = None
+
+        if updated_data.get('frequency') == 'Once':
             task_dict.update(updated_data)
             task_dict['item_type'] = 'task'
             task = dict_to_entities.dict_to_task(task_dict)
@@ -263,6 +267,9 @@ def update_task(user_id, task_id, updated_data, session):
             if task_dict is None:
                 return False
 
+            mongoApi.delete_task(user_id=user_id, task_id=task_dict['last_instance'], session=session)
+            updated_data['last_instance'] = None
+            updated_data['previous_done'] = None
             task_dict.update(updated_data)
             task = dict_to_entities.dict_to_task(task_dict)
             task.item_type = 'recurring task'
@@ -303,13 +310,14 @@ def insert_recurring_tasks_to_task_list(user_id, session):
     recurring_tasks = dict_to_entities.dict_to_task_list(recurring_tasks_dict)
     for recurring_task in recurring_tasks.list_of_tasks:
         if recurring_task.previous_done is None or recurring_task.previous_done < current_date:
-            deadline = find_deadline_for_next_recurring_task(recurring_task, current_date)
+            if recurring_task.last_instance:
+                mongoApi.delete_task(user_id=user_id, task_id=recurring_task.last_instance, session=session)
 
+            deadline = find_deadline_for_next_recurring_task(recurring_task, current_date)
             new_task = recurring_task.generate_recurring_instance(deadline)
-            result = mongoApi.add_task(user_id, new_task, session=session)
-            if result:
-                previous_done = {'previous_done': deadline.isoformat()}
-                if not mongoApi.update_recurring_task(user_id, recurring_task.id(), previous_done, session=session):
+            if mongoApi.add_task(user_id, new_task, session=session):
+                update_recurring_task = {'previous_done': deadline.isoformat(), 'last_instance': recurring_task.last_instance}
+                if not mongoApi.update_recurring_task(user_id, recurring_task.id(), update_recurring_task, session=session):
                     return False
             else:
                 return False
@@ -381,7 +389,7 @@ def get_task(user_id, task_id, session):
 
 def add_task_and_automate(user_id, task_data, session):
     task = dict_to_entities.create_new_task(user_id, task_data, session=session)
-    if not task:
+    if not task or not task.duration:
         return None, None
 
     end_time = datetime.today() + timedelta(days=7)
@@ -400,4 +408,5 @@ def add_task_and_automate(user_id, task_data, session):
             return None, None
 
         end_time = deadline if deadline < end_time else end_time
+        task_instance.status = 'active'
         return task_instance, end_time

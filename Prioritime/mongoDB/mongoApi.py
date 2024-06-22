@@ -472,8 +472,7 @@ def get_recurring_tasks(user_id, session):
 
 def update_recurring_task(user_id, task_id, updated_data, session):
     user_id = ObjectId(user_id)
-    update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items() if
-                     value is not None}
+    update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items()}
     result = users.update_one(
         {"_id": ObjectId(user_id), "recurring_tasks._id": task_id},
         {"$set": update_fields},

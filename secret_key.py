@@ -72,6 +72,12 @@ class Day(Enum):
 print(Day(3).name)
 
 
+temp = {'name': 'dani', 'age': 24, 'city': 'tel'}
+updated = {'name': 'shalom', 'age': None, 'city': ''}
+temp.update({key: val} for key, val in updated.items() if val is not None)
+print(temp)
+
+
 print((calendar.monthrange(2024, 9)[0] + 1) % 7)
 
 task = calendar_objects.Task(name="name", reminders=None)

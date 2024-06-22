@@ -108,6 +108,8 @@ def find_best_start_time(activity, prev_start=None):
     # if not best_start_time:
     #     start, end = activity.free_blocks[0]
     #     best_start_time = start
+    if best_start_time:
+        best_start_time = (best_start_time + timedelta(seconds=59)).replace(second=0, microsecond=0)
 
     return best_start_time
 

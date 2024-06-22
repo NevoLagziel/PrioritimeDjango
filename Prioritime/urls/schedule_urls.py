@@ -18,5 +18,5 @@ urlpatterns = [
     path('get_date_range_schedules/<str:start_date>/<str:end_date>', get_date_range_schedules, name='get_date_range_schedules'),  # GET
     path('automatic_scheduling', automatic_scheduling, name='automatic_scheduling'),  # POST
     path('re_automate/', re_automate, name='re_automate'),  # POST
-    path('save_and_automate/', add_task_and_automate, name='save_and_automate'),  # POST
+    path('save_and_automate', add_task_and_automate, name='save_and_automate'),  # POST
 ]

@@ -53,15 +53,29 @@ class Event(CalendarItem):
         event_dict['item_type'] = self.item_type
         return event_dict
 
+    def __str__(self):
+        return (f"Event: {self._id}\n"
+                f"Name: {self.name}\n"
+                f"Start_time: {self.start_time}\n"
+                f"End_time: {self.end_time}\n")
+
+    def __repr__(self):
+        return (f"Event: {self._id}\n"
+                f"Name: {self.name}\n"
+                f"Start_time: {self.start_time}\n"
+                f"End_time: {self.end_time}\n")
+
 
 class Task(CalendarItem):
-    def __init__(self, priority=None, deadline=None, status=None, previous_done=None, start_time=None, end_time=None,
+    def __init__(self, priority=None, deadline=None, status=None, previous_done=None, last_instance=None,
+                 start_time=None, end_time=None,
                  item_type=None, **kwargs):
         super().__init__(**kwargs)
         self.priority = priority
         self.deadline = deadline if deadline is None else datetime.fromisoformat(deadline)
         self.status = status
         self.previous_done = previous_done if previous_done is None else datetime.fromisoformat(previous_done)
+        self.last_instance = last_instance
         self.start_time = start_time if start_time is None else datetime.fromisoformat(start_time)
         self.end_time = end_time if end_time is None else datetime.fromisoformat(end_time)
         self.item_type = item_type if item_type is not None else 'task'
@@ -76,6 +90,7 @@ class Task(CalendarItem):
         task_dict['status'] = self.status
         task_dict[
             'previous_done'] = self.previous_done if self.previous_done is None else self.previous_done.isoformat()
+        task_dict['last_instance'] = self.last_instance
         task_dict['start_time'] = self.start_time if self.start_time is None else self.start_time.isoformat()
         task_dict['end_time'] = self.end_time if self.end_time is None else self.end_time.isoformat()
         task_dict['item_type'] = self.item_type
@@ -103,29 +118,30 @@ class Task(CalendarItem):
             deadline=deadline.isoformat(),
             status='pending',
         )
+        self.last_instance = new_task.id()
         return new_task
 
-    # def __str__(self):
-    #     return (f"\n"
-    #             f"ID: {self._id}\n"
-    #             f"Name: {self.name}\n"
-    #             f"Description: {self.description}\n"
-    #             f"Start time: {self.start_time}\n"
-    #             f"End time: {self.end_time}\n"
-    #             f"Duration: {self.duration}\n"
-    #             f"Status: {self.status}\n"
-    #             f"Type: {self.item_type}\n")
-    #
-    # def __repr__(self):
-    #     return (f"\n"
-    #             f"ID: {self._id}\n"
-    #             f"Name: {self.name}\n"
-    #             f"Description: {self.description}\n"
-    #             f"Start time: {self.start_time}\n"
-    #             f"End time: {self.end_time}\n"
-    #             f"Duration: {self.duration}\n"
-    #             f"Status: {self.status}\n"
-    #             f"Type: {self.item_type}\n")
+    def __str__(self):
+        return (f"\n"
+                f"ID: {self._id}\n"
+                f"Name: {self.name}\n"
+                f"Description: {self.description}\n"
+                f"Start time: {self.start_time}\n"
+                f"End time: {self.end_time}\n"
+                f"Duration: {self.duration}\n"
+                f"Status: {self.status}\n"
+                f"Type: {self.item_type}\n")
+
+    def __repr__(self):
+        return (f"\n"
+                f"ID: {self._id}\n"
+                f"Name: {self.name}\n"
+                f"Description: {self.description}\n"
+                f"Start time: {self.start_time}\n"
+                f"End time: {self.end_time}\n"
+                f"Duration: {self.duration}\n"
+                f"Status: {self.status}\n"
+                f"Type: {self.item_type}\n")
 
 
 class Tasks:
@@ -229,10 +245,14 @@ class Schedule:
             e_time = datetime.strptime(self.end_time, "%H:%M:%S")
             end_time = end_time.replace(hour=e_time.hour, minute=e_time.minute, second=e_time.second)
 
+        self.event_list.sort(key=lambda x: x.start_time, reverse=False)
         for event in self.event_list:
-            if event.start_time > start_time:
-                free_times.append((start_time, event.start_time))
-                start_time = event.end_time
+            if start_time < event.start_time:
+                if event.start_time < end_time:
+                    free_times.append((start_time, event.start_time))
+                    start_time = event.end_time
+                else:
+                    break
             elif event.end_time > start_time:
                 start_time = event.end_time
 

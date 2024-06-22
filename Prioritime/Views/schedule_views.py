@@ -97,12 +97,13 @@ def add_task_and_automate(request, user_id):
                     session.abort_transaction()
                     return JsonResponse({'error': 'task could not be added'}, status=400)
 
-                if not schedule_tasks(user_id, [task], datetime.today(), end_time, session=session):
+                results = schedule_tasks(user_id, [task], datetime.today(), end_time, session=session)
+                if not results or results[0]['start_time'] is None:
                     session.abort_transaction()
                     return JsonResponse({'error': 'could not schedule the added task'}, status=400)
 
                 session.commit_transaction()
-                return JsonResponse({'message': 'Task created and scheduled successfully!'}, status=200)
+                return JsonResponse({'scheduled_tasks': results}, status=200)
             except Exception as e:
                 session.abort_transaction()
                 print(str(e))
@@ -133,9 +134,10 @@ def automatic_scheduling(request, user_id):
                         session.abort_transaction()
                         return JsonResponse({'error': 'Start comes after end'}, status=400)
 
-                if schedule_tasks_by_id_list(user_id, tasks_id_list, start_date, end_date, session=session):
+                results = schedule_tasks_by_id_list(user_id, tasks_id_list, start_date, end_date, session=session)
+                if results:
                     session.commit_transaction()
-                    return JsonResponse({'message': 'Tasks scheduled successfully'}, status=200)
+                    return JsonResponse({'scheduled_tasks': results}, status=200)
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Could not schedule tasks!'}, status=500)

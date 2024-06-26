@@ -46,9 +46,9 @@ def add_event(request, user_id):
 
 @api_view(['GET'])
 @user_authorization
-def get_event(request, user_id, date):
+def get_event(request, user_id, event_id, date):
     if request.method == 'GET':
-        event_id = request.data.get('_id')
+        item_type = request.GET.get('item_type')
         if not event_id:
             return JsonResponse({'error': 'missing data'}, status=400)
 
@@ -56,7 +56,10 @@ def get_event(request, user_id, date):
             try:
                 session.start_transaction()
                 date = datetime.fromisoformat(date)
-                event = mongoApi.get_event(user_id, date, event_id, session=session)
+                if item_type == 'recurring event':
+                    event = mongo_utils.get_recurring_event(user_id, event_id, session=session)
+                else:
+                    event = mongoApi.get_event(user_id, date, event_id, session=session)
                 if event:
                     session.commit_transaction()
                     return JsonResponse(event)

@@ -31,7 +31,8 @@ def add_task(request, user_id):
 
                 if result:
                     session.commit_transaction()
-                    return JsonResponse({'message': 'Task created successfully'}, status=201)
+                    return JsonResponse(task.__dict__(), status=201)
+                    # return JsonResponse({'message': 'Task created successfully'}, status=201)
                 else:
                     session.abort_transaction()
                     return JsonResponse({'error': 'task could not be added'}, status=500)

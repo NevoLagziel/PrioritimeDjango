@@ -1,47 +1,19 @@
 from ..Model_Logic import calendar_objects, user_preferences
 from ..mongoDB import mongoApi
 from ..utils import is_iso_date
+from enum import Enum
+
+frequency_options = ['Once', 'Every Day', 'Every Week', 'Every 2 Weeks', 'Every Month']
 
 
 # From mongodb #
 def dict_to_task(task_dict):
     task = calendar_objects.Task(**task_dict)
-    # task = calendar_objects.Task(
-    #     _id=task_dict["_id"],
-    #     name=task_dict["name"],
-    #     description=task_dict["description"],
-    #     duration=task_dict["duration"],
-    #     category=task_dict["category"],
-    #     tags=task_dict["tags"],
-    #     reminders=task_dict["reminders"],
-    #     location=task_dict["location"],
-    #     recurring = task_dict["recurring"],
-    #     creation_date=task_dict["creation_date"],
-    #     priority=task_dict["priority"],
-    #     deadline=task_dict["deadline"],
-    #     status=task_dict["status"],
-    # )
     return task
 
 
 def dict_to_event(event_dict):
     event = calendar_objects.Event(**event_dict)
-    # event = calendar_objects.Event(
-    #     _id=event_dict["_id"],
-    #     name=event_dict["name"],
-    #     description=event_dict["description"],
-    #     duration=event_dict["duration"],
-    #     category=event_dict["category"],
-    #     tags=event_dict["tags"],
-    #     reminders=event_dict["reminders"],
-    #     location=event_dict["location"],
-    #     recurring=event_dict["recurring"],
-    #     creation_date=event_dict["creation_date"],
-    #     first_appearance=event_dict["first_appearance"],
-    #     start_time=event_dict["start_time"],
-    #     end_time=event_dict["end_time"],
-    #     sub_event=event_dict["sub_event"],
-    # )
     return event
 
 
@@ -95,6 +67,7 @@ def create_new_task(user_id, data, session):
     name = data.get('name').replace('.', '')  # string
     status = data.get('status')  # filled by default
     frequency = data.get('frequency')  # filled by default
+    frequency = frequency if frequency in frequency_options else 'Once'
     def_keys = ['name', 'status', 'frequency', 'type']
     if 'name' not in data:
         return None
@@ -150,7 +123,7 @@ def create_new_event(data):
         name=data.get('name').replace('.', ''),
         description=data.get('description'),
         duration=data.get('duration'),
-        frequency=data.get('frequency'),
+        frequency=data.get('frequency') if data.get('frequency') in frequency_options else 'Once',
         category=data.get('category'),
         tags=data.get('tags'),
         reminders=data.get('reminders'),
@@ -163,6 +136,8 @@ def create_new_event(data):
 
 
 def organize_data_edit_event(data):
+    frequency = data.get('frequency')
+    frequency = frequency if frequency in frequency_options else 'Once'
     organized_data = {
         '_id': data.get('id') or data.get('_id'),
         'name': data.get('title') or data.get('name'),
@@ -192,6 +167,8 @@ def organize_data_edit_event(data):
 
 
 def organize_data_edit_task(data):
+    frequency = data.get('frequency')
+    frequency = frequency if frequency in frequency_options else 'Once'
     organized_data = {
         '_id': data.get('id') or data.get('_id'),
         'name': data.get('title') or data.get('name'),

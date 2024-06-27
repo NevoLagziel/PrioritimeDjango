@@ -24,14 +24,16 @@ def add_event(request, user_id):
                 if event.frequency == "Once" or event.frequency is None:
                     if mongoApi.add_event(user_id, event, date, session=session):
                         session.commit_transaction()
-                        return JsonResponse({'success': 'new event added successfully'}, status=201)
+                        return JsonResponse(event, status=201)
+                        # return JsonResponse({'success': 'new event added successfully'}, status=201)
 
                 else:
                     event.first_appearance = date
                     event.item_type = 'recurring event'
                     if mongoApi.add_recurring_event(user_id, event, session=session):
                         session.commit_transaction()
-                        return JsonResponse({'success': 'new event added successfully'}, status=201)
+                        return JsonResponse(event.__dict__(), status=201)
+                        # return JsonResponse({'success': 'new event added successfully'}, status=201)
 
                 session.abort_transaction()
                 return JsonResponse({'error': 'problem adding new event to database'}, status=500)

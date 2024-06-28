@@ -84,25 +84,6 @@ def register(request):
                     hashed_password = make_password(password)
 
                     user_data = utils.create_new_user(email, hashed_password, first_name, last_name, confirmation_token)
-                    # Create user document
-                    # user_data = {
-                    #     'firstName': first_name,
-                    #     'lastName': last_name,
-                    #     'email': email,
-                    #     'password': hashed_password,
-                    #     'confirmation_token': confirmation_token,
-                    #     'email_confirmed': False,
-                    #     'calendar': [],
-                    #     'task_list': [],
-                    #     'recurring_events': [],
-                    #     'recurring_tasks': [],
-                    #     'user_preferences': {
-                    #         'preferences': {},
-                    #         'days_off': [],
-                    #         'start_time': time(hour=8).isoformat(),
-                    #         'end_time': time(hour=20).isoformat(),
-                    #     }
-                    # }
 
                     # Insert user document into MongoDB
                     _id = mongoApi.create_user(user_data, session=session)
@@ -348,6 +329,7 @@ def get_preferences(request, user_id):
 def update_preferences(request, user_id):
     if request.method == 'POST':
         data = request.data
+        print(data)
         with client.start_session() as session:
             try:
                 session.start_transaction()

@@ -132,6 +132,10 @@ def create_new_event(data):
         end_time=data.get('end_time'),
         sub_event=data.get('sub_event'),
     )
+
+    if event.start_time < event.end_time:
+        return None
+
     return event
 
 
@@ -149,7 +153,7 @@ def organize_data_edit_event(data):
         'item_type': data.get('type') or data.get('item_type'),
         'description': data.get('description'),
         'location': data.get('location'),
-        'frequency': data.get('frequency'),
+        'frequency': frequency,
         'reminders': data.get('reminders'),
         'creation_date': data.get('creation_date'),
         'sub_event': data.get('sub_event')
@@ -178,7 +182,7 @@ def organize_data_edit_task(data):
         'item_type': data.get('type') or data.get('item_type'),
         'description': data.get('description'),
         'location': data.get('location'),
-        'frequency': data.get('frequency'),
+        'frequency': frequency,
         'creation_date': data.get('creation_date'),
         'deadline': data.get('deadline') if is_iso_date(data.get('deadline')) else None,
         'status': data.get('status'),

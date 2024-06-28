@@ -26,30 +26,3 @@ class TaskSerializer(CalendarItemSerializer):
     deadline = serializers.DateTimeField(allow_null=True, required=False)
     status = serializers.CharField(allow_blank=True, required=False)
     previous_done = serializers.DateTimeField(allow_null=True, required=False)
-
-
-class ScheduleSerializer(serializers.Serializer):
-    date = serializers.DateField()
-    day = serializers.CharField(max_length=20)
-    start_time = serializers.TimeField()
-    end_time = serializers.TimeField()
-    event_list = EventSerializer(many=True)
-    day_off = serializers.BooleanField(default=False)
-
-
-class MonthlyCalendarSerializer(serializers.Serializer):
-    month = serializers.CharField(max_length=20)
-    number_of_days = serializers.IntegerField()
-    starting_day = serializers.CharField(max_length=20)
-    days = ScheduleSerializer(many=True)
-
-
-class YearlyCalendarSerializer(serializers.Serializer):
-    year = serializers.IntegerField()
-    event_count = serializers.IntegerField(default=0)
-    days_off = serializers.IntegerField(default=0)
-    months = MonthlyCalendarSerializer(many=True)
-
-
-class CalendarSerializer(serializers.Serializer):
-    list_of_yearly_calendars = YearlyCalendarSerializer(many=True)

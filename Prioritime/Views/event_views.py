@@ -18,13 +18,14 @@ def add_event(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
+                print(request.data)
                 event = dict_to_entities.create_new_event(request.data)
                 date = event.start_time
 
                 if event.frequency == "Once" or event.frequency is None:
                     if mongoApi.add_event(user_id, event, date, session=session):
                         session.commit_transaction()
-                        return JsonResponse(event, status=201)
+                        return JsonResponse(event.__dict__(), status=201)
                         # return JsonResponse({'success': 'new event added successfully'}, status=201)
 
                 else:

@@ -192,6 +192,9 @@ def organize_data_edit_task(data):
     if organized_data.get('name'):
         organized_data['name'] = organized_data.get('name').replace('.', '')
 
+    if organized_data.get('deadline'):
+        organized_data['deadline'] = organized_data.get('deadline').split('.')[0]
+
     return organized_data
 
 

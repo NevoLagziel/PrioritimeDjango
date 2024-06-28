@@ -20,6 +20,10 @@ def add_event(request, user_id):
                 session.start_transaction()
                 print(request.data)
                 event = dict_to_entities.create_new_event(request.data)
+                if not event:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'Wrong data entered'}, status=400)
+
                 date = event.start_time
 
                 if event.frequency == "Once" or event.frequency is None:

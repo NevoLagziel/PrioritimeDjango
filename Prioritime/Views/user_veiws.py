@@ -77,6 +77,10 @@ def register(request):
                         session.abort_transaction()
                         return JsonResponse({'error': 'User with this email already exists'}, status=409)
 
+                    if len(password) < 8:
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'Password must be at least 8 characters'}, status=400)
+
                     # Generate confirmation token
                     confirmation_token = str(uuid.uuid4())
 
@@ -224,6 +228,37 @@ def login(request):
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
+@api_view(['PUT'])
+@user_authorization
+def change_password(request, user_id):
+    if request.method == 'PUT':
+        with client.start_session() as session:
+            try:
+                session.start_transaction()
+                new_password = request.data.get("password")
+                if not new_password or len(new_password) < 8:
+                    session.abort_transaction()
+                    return JsonResponse({'error': 'New password is not valid'}, status=400)
+
+                hashed_password = make_password(new_password)
+                updated_data = {"password": hashed_password}
+
+                result = mongoApi.update_user_info(user_id, updated_data, session=session)
+                if result:
+                    session.commit_transaction()
+                    return JsonResponse({'message': 'User details updated successfully'}, status=200)
+                else:
+                    session.abort_transaction()
+                return JsonResponse({'error': 'Problem updating user'}, status=400)
+
+            except Exception as e:
+                session.abort_transaction()
+                print(str(e))
+                return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
 @api_view(['GET'])
 @user_authorization
 def get_user_info(request, user_id):
@@ -255,7 +290,7 @@ def update_user_info(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                updated_data = request.data
+                updated_data = dict_to_entities.organize_data_edit_user_info(request.data)
                 email = updated_data.get('email')
                 if not mongoApi.check_email_can_be_changed(user_id=user_id, email=email, session=session):
                     session.abort_transaction()

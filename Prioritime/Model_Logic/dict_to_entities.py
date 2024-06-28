@@ -198,6 +198,15 @@ def organize_data_edit_task(data):
     return organized_data
 
 
+def organize_data_edit_user_info(data):
+    organized_data = {
+        'email': data.get('email'),
+        'first_name': data.get('first_name'),
+        'last_name': data.get('last_name')
+    }
+    return organized_data
+
+
 # def dict_to_preferences(data):
 #     copy_data = data.copy()
 #     preferences = data.get('preferences')

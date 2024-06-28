@@ -141,7 +141,7 @@ def data_preparation(user_id, task_list, begin_date, end_date, session, schedule
         if schedule is None:
             return None
 
-        if not schedule.day_off and Day(schedule.day).value not in days_off:
+        if not schedule.day_off and Day(schedule.day).name not in days_off:
             all_free_time_blocks.append(schedule.free_time_init(
                 datetime.strptime(start_time, "%H:%M:%S")
                 .replace(year=current_date.year, month=current_date.month, day=current_date.day),

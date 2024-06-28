@@ -145,8 +145,8 @@ def organize_data_edit_task(data):
 def organize_data_edit_user_info(data):
     organized_data = {
         'email': data.get('email'),
-        'first_name': data.get('first_name'),
-        'last_name': data.get('last_name')
+        'firstName': data.get('firstName'),
+        'lastName': data.get('lastName')
     }
     return organized_data
 

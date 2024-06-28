@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view
 
 from db_connection import db, client
-from ..Model_Logic import dict_to_entities
+from ..Model_Logic import dict_to_entities_from_requests
 from ..mongoDB import mongoApi, mongo_utils
 from .user_veiws import user_authorization
 
@@ -18,7 +18,7 @@ def add_task(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                task = dict_to_entities.create_new_task(user_id, request.data, session=session)
+                task = dict_to_entities_from_requests.create_new_task(user_id, request.data, session=session)
                 if not task:
                     session.abort_transaction()
                     return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
@@ -80,7 +80,7 @@ def delete_task(request, user_id, task_id):
 @user_authorization
 def edit_task(request, user_id, task_id):
     if request.method == 'PUT':
-        updated_data = dict_to_entities.organize_data_edit_task(request.data)
+        updated_data = dict_to_entities_from_requests.organize_data_edit_task(request.data)
         with client.start_session() as session:
             try:
                 session.start_transaction()

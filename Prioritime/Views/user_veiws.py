@@ -12,7 +12,7 @@ from rest_framework.decorators import api_view
 
 from db_connection import db, client
 from ..mongoDB import mongoApi, mongo_utils
-from ..Model_Logic import dict_to_entities, user_preferences
+from ..Model_Logic import dict_to_entities_from_requests, user_preferences
 from .. import utils
 
 users_collection = db['users']
@@ -290,7 +290,7 @@ def update_user_info(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                updated_data = dict_to_entities.organize_data_edit_user_info(request.data)
+                updated_data = dict_to_entities_from_requests.organize_data_edit_user_info(request.data)
                 email = updated_data.get('email')
                 if not mongoApi.check_email_can_be_changed(user_id=user_id, email=email, session=session):
                     session.abort_transaction()
@@ -368,7 +368,7 @@ def update_preferences(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                preference_manager = dict_to_entities.dict_to_preferences(data)
+                preference_manager = dict_to_entities_from_requests.dict_to_preferences(data)
                 result = mongoApi.update_preferences(user_id, preference_manager, session=session)
                 if result:
                     session.commit_transaction()

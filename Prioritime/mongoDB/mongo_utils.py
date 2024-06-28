@@ -1,5 +1,5 @@
 from . import mongoApi
-from Prioritime.Model_Logic import dict_to_entities, calendar_objects
+from Prioritime.Model_Logic import dict_to_entities, dict_to_entities_from_requests, calendar_objects
 import calendar
 from datetime import datetime, timedelta
 
@@ -388,7 +388,7 @@ def get_task(user_id, task_id, session):
 
 
 def add_task_and_automate(user_id, task_data, session):
-    task = dict_to_entities.create_new_task(user_id, task_data, session=session)
+    task = dict_to_entities_from_requests.create_new_task(user_id, task_data, session=session)
     if not task or not task.duration:
         return None, None
 

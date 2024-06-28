@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view
 
 from db_connection import db, client
-from ..Model_Logic import dict_to_entities
+from ..Model_Logic import dict_to_entities_from_requests
 from ..mongoDB import mongoApi, mongo_utils
 from .user_veiws import user_authorization
 
@@ -18,8 +18,7 @@ def add_event(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                print(request.data)
-                event = dict_to_entities.create_new_event(request.data)
+                event = dict_to_entities_from_requests.create_new_event(request.data)
                 if not event:
                     session.abort_transaction()
                     return JsonResponse({'error': 'Wrong data entered'}, status=400)
@@ -86,7 +85,7 @@ def get_event(request, user_id, event_id, date):
 @user_authorization
 def edit_event(request, user_id, event_id, date):
     if request.method == 'PUT':
-        data = dict_to_entities.organize_data_edit_event(request.data)
+        data = dict_to_entities_from_requests.organize_data_edit_event(request.data)
         with client.start_session() as session:
             try:
                 session.start_transaction()

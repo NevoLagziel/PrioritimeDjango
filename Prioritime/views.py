@@ -12,7 +12,7 @@ from rest_framework.decorators import api_view
 
 from db_connection import db, client
 from .mongoDB import mongoApi, mongo_utils
-from .Model_Logic import dict_to_entities, user_preferences
+from .Model_Logic import dict_to_entities_from_requests, user_preferences
 from . import utils
 from .Scheduling_Algorithm.automatic_scheduling import re_schedule_tasks, schedule_tasks, schedule_tasks_by_id_list
 
@@ -376,7 +376,7 @@ def add_event(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                event = dict_to_entities.create_new_event(request.data)
+                event = dict_to_entities_from_requests.create_new_event(request.data)
                 date = event.start_time
 
                 if event.frequency == "Once" or event.frequency is None:
@@ -412,7 +412,7 @@ def add_task(request, user_id):
             try:
                 session.start_transaction()
 
-                task = dict_to_entities.create_new_task(user_id, request.data, session=session)
+                task = dict_to_entities_from_requests.create_new_task(user_id, request.data, session=session)
                 if not task or task.deadline < datetime.now():
                     session.abort_transaction()
                     return JsonResponse({'error': 'task could not be added, missing data'}, status=400)
@@ -572,7 +572,7 @@ def get_monthly_calendar(request, user_id, date):
 @user_authorization
 def edit_event(request, user_id, event_id, date):
     if request.method == 'PUT':
-        data = dict_to_entities.organize_data_edit_event(request.data)
+        data = dict_to_entities_from_requests.organize_data_edit_event(request.data)
         with client.start_session() as session:
             try:
                 session.start_transaction()
@@ -664,7 +664,7 @@ def delete_task(request, user_id, task_id):
 @user_authorization
 def edit_task(request, user_id, task_id):
     if request.method == 'PUT':
-        updated_data = dict_to_entities.organize_data_edit_task(request.data)
+        updated_data = dict_to_entities_from_requests.organize_data_edit_task(request.data)
         with client.start_session() as session:
             try:
                 session.start_transaction()
@@ -766,7 +766,7 @@ def update_preferences(request, user_id):
         with client.start_session() as session:
             try:
                 session.start_transaction()
-                preference_manager = dict_to_entities.dict_to_preferences(data)
+                preference_manager = dict_to_entities_from_requests.dict_to_preferences(data)
                 result = mongoApi.update_preferences(user_id, preference_manager, session=session)
                 if result:
                     session.commit_transaction()
@@ -807,7 +807,6 @@ def set_day_off(request, user_id, date):
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
-# TODO for the next 30 days
 @api_view(['POST'])
 @user_authorization
 def automatic_scheduling(request, user_id):

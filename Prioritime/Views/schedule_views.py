@@ -95,12 +95,12 @@ def add_task_and_automate(request, user_id):
                 task, end_time = mongo_utils.add_task_and_automate(user_id, data, session=session)
                 if task is None or end_time is None:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'task could not be added'}, status=400)
+                    return JsonResponse({'error': 'Task could not be added'}, status=400)
 
                 results = schedule_tasks(user_id, [task], datetime.today(), end_time, session=session)
                 if not results or results[0]['start_time'] is None:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'could not schedule the added task'}, status=400)
+                    return JsonResponse({'error': 'Could not schedule the added task'}, status=400)
 
                 session.commit_transaction()
                 return JsonResponse({'scheduled_tasks': results}, status=200)

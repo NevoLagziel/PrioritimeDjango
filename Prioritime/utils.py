@@ -2,7 +2,10 @@ import jwt
 from config import JWT_SECRET_KEY
 from datetime import timedelta, time, datetime
 from django.utils import timezone
+from django.core.validators import EmailValidator
+from django.core.exceptions import ValidationError
 
+email_validator = EmailValidator()
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_DELTA = timedelta(hours=100000)
 
@@ -50,4 +53,12 @@ def is_iso_date(date_string):
         datetime.fromisoformat(date_string)
         return True
     except ValueError:
+        return False
+
+
+def validate_email(email):
+    try:
+        email_validator(email)
+        return True
+    except ValidationError:
         return False

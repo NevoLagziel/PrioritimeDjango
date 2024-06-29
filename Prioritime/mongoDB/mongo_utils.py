@@ -330,8 +330,10 @@ def insert_recurring_tasks_to_task_list(user_id, session):
 
             new_task = recurring_task.generate_recurring_instance(deadline)
             if mongoApi.add_task(user_id, new_task, session=session):
-                update_recurring_task = {'previous_done': deadline.isoformat(), 'last_instance': recurring_task.last_instance}
-                if not mongoApi.update_recurring_task(user_id, recurring_task.id(), update_recurring_task, session=session):
+                update_recurring_task = {'previous_done': deadline.isoformat(),
+                                         'last_instance': recurring_task.last_instance}
+                if not mongoApi.update_recurring_task(user_id, recurring_task.id(), update_recurring_task,
+                                                      session=session):
                     return False
             else:
                 return False
@@ -409,8 +411,8 @@ def add_task_and_automate(user_id, task_data, session):
 
     end_time = datetime.today() + timedelta(days=7)
     if task.frequency == "Once" or task.frequency is None:
-        if not mongoApi.add_task(user_id, task, session=session):
-            return None, None
+        # if not mongoApi.add_task(user_id, task, session=session):
+        # return None, None
 
         end_time = task.deadline if task.deadline is not None and task.deadline < end_time else end_time
         return task, end_time

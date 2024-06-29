@@ -248,7 +248,7 @@ def update_pending_task(user_id, task, start_time, end_time, session):
 def update_new_task(user_id, task, start_time, end_time, session):
     task.schedule(start_time=start_time, end_time=end_time)
     if task.status == 'scheduled':
-        if not mongoApi.add_event(user_id, task, start_time, session=session):
-            return False
+        if mongoApi.add_event(user_id, task, start_time, session=session):
+            return True
 
-    return True
+    return False

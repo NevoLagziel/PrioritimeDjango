@@ -72,13 +72,15 @@ def register(request):
         first_name = request.data.get('firstName')
         last_name = request.data.get('lastName')
         if email and password:
+            if not utils.validate_email(email):
+                return JsonResponse({'error': 'Email address must be valid'}, status=400)
+
             if not first_name or not last_name:
                 return JsonResponse({'error': 'First name and last name are required'}, status=400)
 
             with client.start_session() as session:
                 try:
                     session.start_transaction()
-                    email_validator(email)
                     if mongoApi.user_exists(email=email, session=session):
                         session.abort_transaction()
                         return JsonResponse({'error': 'User with this email already exists'}, status=409)

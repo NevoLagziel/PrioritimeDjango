@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import wraps
 
 from django.conf import settings
@@ -9,12 +9,14 @@ from django.http import HttpResponse
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from rest_framework.decorators import api_view
+from django.core.validators import EmailValidator
 
 from db_connection import db, client
 from ..mongoDB import mongoApi, mongo_utils
 from ..Model_Logic import dict_to_entities_from_requests, user_preferences
 from .. import utils
 
+email_validator = EmailValidator()
 users_collection = db['users']
 
 
@@ -73,6 +75,7 @@ def register(request):
             with client.start_session() as session:
                 try:
                     session.start_transaction()
+                    email_validator(email)
                     if mongoApi.user_exists(email=email, session=session):
                         session.abort_transaction()
                         return JsonResponse({'error': 'User with this email already exists'}, status=409)
@@ -292,6 +295,7 @@ def update_user_info(request, user_id):
                 session.start_transaction()
                 updated_data = dict_to_entities_from_requests.organize_data_edit_user_info(request.data)
                 email = updated_data.get('email')
+                email_validator(email)
                 if not mongoApi.check_email_can_be_changed(user_id=user_id, email=email, session=session):
                     session.abort_transaction()
                     return JsonResponse({'error': 'User with this email already exists'}, status=409)

@@ -140,7 +140,8 @@ def automatic_scheduling(request, user_id):
                     return JsonResponse({'scheduled_tasks': results}, status=200)
                 else:
                     session.abort_transaction()
-                    return JsonResponse({'error': 'Could not schedule tasks!'}, status=500)
+                    return JsonResponse({'error': 'Could not schedule tasks!, '
+                                                  'task must have duration and deadline not passed'}, status=500)
 
             except Exception as e:
                 session.abort_transaction()

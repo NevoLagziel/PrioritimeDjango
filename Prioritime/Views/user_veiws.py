@@ -72,6 +72,9 @@ def register(request):
         first_name = request.data.get('firstName')
         last_name = request.data.get('lastName')
         if email and password:
+            if not first_name or not last_name:
+                return JsonResponse({'error': 'First name and last name are required'}, status=400)
+
             with client.start_session() as session:
                 try:
                     session.start_transaction()
@@ -306,7 +309,7 @@ def update_user_info(request, user_id):
                     return JsonResponse({'message': 'User details updated successfully'}, status=200)
                 else:
                     session.abort_transaction()
-                return JsonResponse({'error': 'Problem updating user'}, status=400)
+                    return JsonResponse({'error': 'Problem updating user'}, status=400)
 
             except Exception as e:
                 session.abort_transaction()

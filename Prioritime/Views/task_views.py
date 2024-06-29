@@ -27,6 +27,11 @@ def add_task(request, user_id):
                     result = mongoApi.add_task(user_id, task, session=session)
                 else:
                     task.item_type = 'recurring task'
+                    # checking if recurring task could be added if deadline already passed
+                    if task.deadline and task.deadline < datetime.now():
+                        session.abort_transaction()
+                        return JsonResponse({'error': 'Recurring task deadline already passed'}, status=400)
+
                     result = mongoApi.add_recurring_task(user_id, task, session=session)
 
                 if result:

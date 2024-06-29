@@ -306,14 +306,28 @@ def insert_recurring_tasks_to_task_list(user_id, session):
     if not recurring_tasks_dict:
         return True
 
-    current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
+    # trying that current date would be not just by date
+    # current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
+    current_date = datetime.now()
     recurring_tasks = dict_to_entities.dict_to_task_list(recurring_tasks_dict)
     for recurring_task in recurring_tasks.list_of_tasks:
         if recurring_task.previous_done is None or recurring_task.previous_done < current_date:
             if recurring_task.last_instance:
                 mongoApi.delete_task(user_id=user_id, task_id=recurring_task.last_instance, session=session)
 
+            # checking if recurring task deadline passed, so it would stop creating new tasks and be deleted
+            if recurring_task.deadline and current_date > recurring_task.deadline:
+                if mongoApi.delete_recurring_task(user_id=user_id, task_id=recurring_task.id(), session=session):
+                    return True
+                else:
+                    return False
+
             deadline = find_deadline_for_next_recurring_task(recurring_task, current_date)
+
+            # checking if recurring task deadline is after the calculated deadline, so it would stop creating new tasks
+            if recurring_task.deadline and deadline > recurring_task.deadline:
+                deadline = recurring_task.deadline
+
             new_task = recurring_task.generate_recurring_instance(deadline)
             if mongoApi.add_task(user_id, new_task, session=session):
                 update_recurring_task = {'previous_done': deadline.isoformat(), 'last_instance': recurring_task.last_instance}
@@ -389,7 +403,8 @@ def get_task(user_id, task_id, session):
 
 def add_task_and_automate(user_id, task_data, session):
     task = dict_to_entities_from_requests.create_new_task(user_id, task_data, session=session)
-    if not task or not task.duration:
+    current_date = datetime.now()
+    if not task or not task.duration or (task.deadline and task.deadline < current_date):
         return None, None
 
     end_time = datetime.today() + timedelta(days=7)
@@ -400,8 +415,13 @@ def add_task_and_automate(user_id, task_data, session):
         end_time = task.deadline if task.deadline is not None and task.deadline < end_time else end_time
         return task, end_time
     else:
-        current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
+        # From here, added for handling the deadline in recurring task
+        # current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
         deadline = find_deadline_for_next_recurring_task(task, current_date)
+        if task.deadline and deadline > task.deadline:
+            deadline = task.deadline
+        # To here
+
         task_instance = task.generate_recurring_instance(deadline)
         task.previous_done = deadline
         if not mongoApi.add_recurring_task(user_id, task, session=session):

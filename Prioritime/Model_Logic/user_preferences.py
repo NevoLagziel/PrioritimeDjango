@@ -6,7 +6,7 @@ default_end_time = time(hour=20)
 
 class Preference:
     def __init__(self, name, days=None, daytime=None, **fields):
-        self.name = name.lower()
+        self.name = name.lower()  # this been deleted : self.name = name.lower()
         self.days = days
         self.daytime = daytime
         self.fields = fields

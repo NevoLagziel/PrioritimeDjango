@@ -6,15 +6,15 @@ frequency_options = ['Once', 'Every Day', 'Every Week', 'Every 2 Weeks', 'Every 
 
 
 def create_new_task(user_id, data, session):
-    # must have at least a name
     auto_fill = True
+    def_keys = ['name', 'status', 'frequency', 'type']
+    if 'name' not in data:
+        return None
+
     name = data.get('name').replace('.', '')  # string
     status = data.get('status')  # filled by default
     frequency = data.get('frequency')  # filled by default
     frequency = frequency if frequency in frequency_options else 'Once'
-    def_keys = ['name', 'status', 'frequency', 'type']
-    if 'name' not in data:
-        return None
 
     for key in data.keys():
         if key not in def_keys and data.get(key):
@@ -31,7 +31,6 @@ def create_new_task(user_id, data, session):
             fields = preference.fields
             task = calendar_objects.Task(name=name, status=status, **fields)
         else:
-            # creating task with only name
             task = calendar_objects.Task(name=name, status=status)
     else:
         # creating task by the data entered by the user
@@ -99,7 +98,6 @@ def organize_data_edit_event(data):
         'location': data.get('location'),
         'frequency': frequency,
         'reminders': data.get('reminders'),
-        'creation_date': data.get('creation_date'),
         'sub_event': data.get('sub_event')
     }
     if organized_data.get('start_time'):
@@ -127,7 +125,6 @@ def organize_data_edit_task(data):
         'description': data.get('description'),
         'location': data.get('location'),
         'frequency': frequency,
-        'creation_date': data.get('creation_date'),
         'deadline': data.get('deadline') if is_iso_date(data.get('deadline')) else None,
         'status': data.get('status'),
         'priority': data.get('priority'),

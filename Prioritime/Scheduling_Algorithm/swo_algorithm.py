@@ -1,19 +1,23 @@
 from datetime import datetime, timedelta
 
 
-# consider adding another score for activity that is just part in a preferred time
-def utility(activity, planned_start=None, prev_start=None):  # need to think and check the scoring
+# Function for calculating the utility of an activity, for a certain scheduled time or the best time.
+def utility(activity, planned_start=None, prev_start=None):
     score = 0
     current_date = datetime.now()
+    # For calculating the best possible utility for an activity (according to the free time blocks available)
     if planned_start is None:  # for calculating the estimated utility
         planned_start = find_best_start_time(activity, prev_start)
 
+    # For handling unscheduled activities at the sum of utilities calculation
     if planned_start == 0:
         return score
 
+    # If couldn't find available time slot returns the lowest utility for making sure promotion
     if planned_start is None:
         return float('-inf')
 
+    # Calculation utility based on factors such as deadline and preferences
     if activity.deadline and planned_start:
         if planned_start + timedelta(minutes=activity.duration) > activity.deadline:
             return float('-inf')
@@ -53,6 +57,7 @@ def utility(activity, planned_start=None, prev_start=None):  # need to think and
     return score
 
 
+# Function for finding the best time slot for an activity, from the available time slots for it
 def find_best_start_time(activity, prev_start=None):
     best_start_time = None
     best_utility = float('-inf')
@@ -78,8 +83,6 @@ def find_best_start_time(activity, prev_start=None):
                             best_start_time = start
                             best_utility = current_utility
 
-    # by calculating utility we're already considering if it's a preferred day
-    #  if not best_start_time:
     for start, end in activity.free_blocks:
         current_utility = utility(activity, start, prev_start)
         if current_utility > best_utility:
@@ -95,25 +98,14 @@ def find_best_start_time(activity, prev_start=None):
                         best_start_time = new_start
                         best_utility = current_utility
 
-    # If no preferred time is found, check all free blocks
-    # if not best_st art_time:
-    #     if activity.preferred_days:
-    #         for start, end in activity.free_blocks:
-    #             if start.weekday() in activity.preferred_days:
-    #                 current_utility = utility(activity, start)
-    #                 if current_utility > best_utility:
-    #                     best_start_time = start
-    #                     best_utility = current_utility
-    #
-    # if not best_start_time:
-    #     start, end = activity.free_blocks[0]
-    #     best_start_time = start
+    # Making sure the start time is rounded
     if best_start_time:
         best_start_time = (best_start_time + timedelta(seconds=59)).replace(second=0, microsecond=0)
 
     return best_start_time
 
 
+# Function for filtering free time blocks for an activity
 def filter_free_time_blocks(activity):
     filtered_free_time_blocks = []
     for start, end in activity.free_blocks:
@@ -123,6 +115,7 @@ def filter_free_time_blocks(activity):
     activity.free_blocks = filtered_free_time_blocks
 
 
+# Function for updating activities free time blocks after the range from start_time to end_time caught
 def update_free_time_blocks(activity, start_time, end_time):
     new_free_blocks = []
     for block_start, block_end in activity.free_blocks:
@@ -140,11 +133,13 @@ def update_free_time_blocks(activity, start_time, end_time):
     activity.free_blocks = new_free_blocks
 
 
+# Function for correctly sorting the promotion list by the worst utility first
 def sort_promotions(x):
     a, (b, util) = x
     return util
 
 
+# Function for checking if we got the same result, for re-schedule (date, month)
 def same_schedule_results(current_plan, prev_schedule):
     for task_id, task in prev_schedule.items():
         if current_plan[task_id] is None:
@@ -157,6 +152,7 @@ def same_schedule_results(current_plan, prev_schedule):
     return True
 
 
+# SWO algorithm for scheduling, returns the scheduled activities and the unscheduled
 def schedule_activities(activities, max_iterations=1000, early_termination_consecutive=3, prev_schedule=None):
     best_plan = None
     best_utility = float('-inf')
@@ -164,38 +160,23 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
     consecutive_no_improvement = 0
     best_possible_utility = 0
 
-    # if len(activities) == 1:
-    #     best_start_time = find_best_start_time(activities[0], prev_start=prev_schedule[
-    #         activities[0].id].start_time if prev_schedule is not None else None)
-    #     if best_start_time:
-    #         planned_end = best_start_time + timedelta(minutes=activities[0].duration)
-    #         best_plan = {activities[0].id: (best_start_time, planned_end)}
-    #     else:
-    #         unscheduled_activities = set()
-    #         unscheduled_activities.add(activities[0].id)
-    #
-    #     return best_plan, unscheduled_activities
-
     for act in activities:
         filter_free_time_blocks(act)
 
+    # Initializing the possible utility for each activity
     activity_utilities = {
         activity.id: utility(activity,
                              prev_start=None if prev_schedule is None else prev_schedule[activity.id].start_time)
         for
         activity in activities}
 
+    # Calculating the best possible utility just to compare to the result utility
     for i, util in activity_utilities.items():
         if util < (-100):
             util = -20
         best_possible_utility += util
 
-    print('best utility: ', best_possible_utility)
-
-    # promotion_dict = dict.fromkeys(activity.id for activity in activities)
     promotions = []
-    # print('activity utilities: ', activity_utilities)
-
     base_pq = sorted(activities, key=lambda activity: -activity_utilities[activity.id])
     for _ in range(max_iterations):
         # resting the free time blocks of each activity
@@ -203,10 +184,7 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
             activity.free_blocks = activity.total_free_blocks
 
         # promoting the activities that was marked for promotion at the last iteration
-        # for promotion_id, promote_before_id in promotion_dict.items():
-
         promotions.sort(key=sort_promotions)
-
         for promotion_id, (promote_before_id, util) in promotions:
             if promote_before_id:
                 index = next((i for i, act in enumerate(base_pq) if act.id == promotion_id), None)
@@ -215,7 +193,6 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
                 base_pq.insert(before_index, act_for_promotion)
 
         # resting the promotion dictionary for the next iteration
-        # promotion_dict = dict.fromkeys(activity.id for activity in activities)
         promotions = []
         pq = base_pq.copy()
 
@@ -223,10 +200,13 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
         current_unscheduled_activities = set()
 
         while pq:
+            # Checking the best available time for each of the activities by the priority queue
             activity = pq.pop(0)
             best_start_time = find_best_start_time(activity,
                                                    prev_start=None if prev_schedule is None else prev_schedule[
                                                        activity.id].start_time)
+            # Update the free time blocks left for each activity
+            # Calculate the possible utility for each activity yet to scheduled, if went down added to promotion
             if best_start_time:
                 planned_end = best_start_time + timedelta(minutes=activity.duration)
                 current_plan[activity.id] = (best_start_time, planned_end)
@@ -238,26 +218,24 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
                         if new_utility < activity_utilities[other_activity.id]:
                             if other_activity.id not in dict(promotions).keys():
                                 promotions.append((other_activity.id, (activity.id, new_utility)))
-                            # if promotion_dict[other_activity.id] is None:
-                            #     promotion_dict[other_activity.id] = activity.id
-                            #     print(f"{other_activity.id} util = {new_utility} from adding : {activity.id}")
             else:
                 current_unscheduled_activities.add(activity.id)
 
-        # Calculate utility including penalties for unscheduled activities
+        # Calculate utility for iteration result including penalties for unscheduled activities
         current_utility = sum(
             utility(act, planned_start=current_plan[act.id][0] if current_plan[act.id] else 0,
                     prev_start=None if prev_schedule is None else prev_schedule[act.id].start_time) for act in
             activities)
-
         penalty = -len(current_unscheduled_activities) * 20  # Adjust the penalty weight as needed
-        # to make sure it would pick a different result
+
+        # To make sure it would pick a different result
         if prev_schedule is not None:
             if same_schedule_results(current_plan, prev_schedule):
                 penalty += -100
 
         current_utility += penalty
 
+        # Checking if iteration result is better than the best so far, if so updating the best result
         if current_utility > best_utility:
             best_plan = current_plan.copy()
             best_utility = current_utility
@@ -269,69 +247,8 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
         if consecutive_no_improvement >= early_termination_consecutive:
             break
 
-    print("Best utility: ", best_utility)
+    # Calculating the percentage of the result utility from the best possible utility
     if best_possible_utility > 0:
         print("Percentage:", ((best_utility/best_possible_utility)*100))
-    return best_plan, unscheduled_activities
 
-# # Example usage
-# from Prioritime.Model_Logic.calendar_objects import Task
-# from Prioritime.mongoDB import mongoApi
-# from datetime import time
-# from Prioritime.Scheduling_Algorithm.data_preparation import data_preparation, arrange_prev_schedule
-# from db_connection import client
-#
-# user_id = '663cafd680b6dde278303f1d'
-# general = {'name': 'general', 'start_time': time(hour=8).isoformat(), 'end_time': time(hour=20).isoformat()}
-# with client.start_session() as session:
-#     try:
-#         session.start_transaction()
-#         mongoApi.update_preferences(user_id, general, session=session)
-#
-#         preference = {
-#             'name': 'Task_2',
-#             'possible_days': [0, 1, 2, 3],
-#             'day_part': {'morning': False, 'noon': True, 'evening': True}
-#         }
-#
-#         mongoApi.update_preferences(user_id, preference, session=session)
-#
-#         preference = {
-#             'name': 'Task_5',
-#             'possible_days': [0, 1, 3],
-#             'day_part': {'morning': True, 'noon': False, 'evening': False}
-#         }
-#
-#         mongoApi.update_preferences(user_id, preference, session=session)
-#
-#         task_list = [
-#             Task(_id='123a4223sd', name='Task_1', deadline=datetime(2024, 12, 10).isoformat(), duration=40,
-#                  start_time=datetime(2024, 6, 1, 14, 40).isoformat(),
-#                  end_time=datetime(2024, 6, 1, 15, 20).isoformat()),
-#
-#             Task(_id='123as332rd', name='Task_2', deadline=datetime(2024, 8, 10).isoformat(), duration=20,
-#                  start_time=datetime(2024, 6, 3, 16, 0).isoformat(), end_time=datetime(2024, 6, 3, 16, 20).isoformat()),
-#
-#             Task(_id='123fw3a4sd', name='Task_3', deadline=datetime(2024, 7, 10).isoformat(), duration=400,
-#                  start_time=datetime(2024, 6, 1, 8, 0).isoformat(), end_time=datetime(2024, 6, 1, 14, 40).isoformat()),
-#
-#             Task(_id='123asf423d', name='Task_4', deadline=datetime(2024, 6, 10).isoformat(), duration=30,
-#                  start_time=datetime(2024, 6, 9, 8, 0).isoformat(), end_time=datetime(2024, 6, 9, 8, 30).isoformat()),
-#
-#             Task(_id='123asf234d', name='Task_5', deadline=datetime(2024, 11, 10).isoformat(), duration=70,
-#                  start_time=datetime(2024, 6, 3, 8, 0).isoformat(), end_time=datetime(2024, 6, 3, 9, 10).isoformat()),
-#
-#             Task(_id='123a3424sd', name='Task_6', deadline=datetime(2024, 12, 10).isoformat(), duration=90,
-#                  start_time=datetime(2024, 6, 1, 15, 20).isoformat(), end_time=datetime(2024, 6, 1, 16, 50).isoformat())
-#         ]
-#         activities = data_preparation(user_id, task_list, datetime(year=2024, month=6, day=1),
-#                                       datetime(year=2024, month=6, day=30), session=session)
-#
-#         prev_schedule = arrange_prev_schedule(task_list)
-#
-#     except Exception as e:
-#         session.abort_transaction()
-#         print(e)
-#
-# final_plan, unschedule_tasks = schedule_activities(activities, prev_schedule=prev_schedule)
-# print(f"plan: {final_plan} , unscheduled activities: {unschedule_tasks}")
+    return best_plan, unscheduled_activities

@@ -39,63 +39,56 @@ def create_new_schedule(year, month, day):
     return schedule
 
 
+# Function to get the monthly calendar with recurring events placed
 def get_monthly_calendar(user_id, date, session):
     month = date.month
     year = date.year
+    # Loading the monthly calendar from the DB
     monthly_calendar_dict = mongoApi.get_monthly_calendar(user_id, date, session=session)
+    # If exists make it an object if not create a new one
     if monthly_calendar_dict:
         monthly_calendar = dict_to_entities.dict_to_monthly_calendar(monthly_calendar_dict)
     else:
         monthly_calendar = create_new_month(year, month)
 
+    # Load the recurring events list from the DB
     recurring_events = mongoApi.get_recurring_events(user_id, session=session)
-    if recurring_events is None:
-        return None
-
-    # task_list_dict = task_list_dict['task_list']
     if not recurring_events:
         return monthly_calendar
 
-    # tasks = dict_to_entities.dict_to_task_list(task_list_dict) if task_list_dict else None
+    # Adding the recurring events instances in the correct schedules
     for schedule in monthly_calendar.list_of_schedules:
         datetime_date = datetime(year=year, month=month, day=schedule.date)
-        if recurring_events:
-            insert_recurring_events_to_schedule(recurring_events, schedule, datetime_date)
+        insert_recurring_events_to_schedule(recurring_events, schedule, datetime_date)
 
-        # remove that if updating the tasks to be in a schedule
-        # if tasks:
-        #     insert_scheduled_tasks_to_schedule(tasks, schedule, datetime_date)
     return monthly_calendar
 
 
+# Function to get the daily schedule with recurring events placed
 def get_schedule(user_id, date, session):
     year = date.year
     month = date.month
     day = date.day
+    # Loading the schedule from the DB
     schedule_dict = mongoApi.get_schedule(user_id, date, session=session)
+    # If exists make it an object if not create a new one
     if schedule_dict:
         schedule = dict_to_entities.dict_to_schedule(schedule_dict)
     else:
         schedule = create_new_schedule(year, month, day)
 
+    # Loading the recurring events list from the DB
     recurring_events = mongoApi.get_recurring_events(user_id, session=session)
-    if recurring_events is None:
-        return None
+    if not recurring_events:
+        return schedule
 
+    # Inserting the necessary recurring events to the schedule
     insert_recurring_events_to_schedule(recurring_events, schedule, date)
-
-    # remove that if updating the tasks to be in a schedule
-    # task_list_dict = get_task_list(user_id, session=session)
-    # if task_list_dict is None:
-    #     return None
-    #
-    # if task_list_dict:
-    #     tasks = dict_to_entities.dict_to_task_list(task_list_dict['task_list'])
-    #     insert_scheduled_tasks_to_schedule(tasks, schedule, date)
 
     return schedule
 
 
+# Function to get all the schedules from a date to another date
 def get_date_range_schedules(user_id, start_date, end_date, session):
     if start_date > end_date:
         return None
@@ -113,25 +106,18 @@ def get_date_range_schedules(user_id, start_date, end_date, session):
     return schedules
 
 
+# Function for inserting recurring events to a schedule
 def insert_recurring_events_to_schedule(recurring_events, schedule, date):
     for recurring_event_dict in recurring_events:
         recurring_event = dict_to_entities.dict_to_event(recurring_event_dict)
         if is_recurring_on_date(recurring_event, date):
             recurring_event.start_time = recurring_event.start_time.replace(year=date.year, month=date.month,
                                                                             day=date.day)
-
             recurring_event.end_time = recurring_event.end_time.replace(year=date.year, month=date.month, day=date.day)
-
             schedule.add_event(recurring_event)
 
 
-def insert_scheduled_tasks_to_schedule(tasks, schedule, date):
-    filtered_tasks = tasks.filter_by(status='scheduled', date=date)
-    if filtered_tasks:
-        for task in filtered_tasks:
-            schedule.add_event(task)
-
-
+# Function for checking if recurring event has instance in a specific date
 def is_recurring_on_date(recurring_event, target_date):
     recurrence_pattern = recurring_event.frequency
     if recurrence_pattern == 'Every Day':
@@ -159,32 +145,12 @@ def is_recurring_on_date(recurring_event, target_date):
     return False
 
 
-# def update_event_2(user_id, old_date, new_date, event_id, updated_data, session):
-#     item_type = updated_data.get('item_type')
-#     if item_type == 'recurring event':
-#         new_updated_data = updated_data.copy()
-#         if old_date.date() != new_date.date():
-#             new_updated_data['first_appearance'] = new_date.isoformat()
-#
-#         if mongoApi.update_recurring_event(user_id, event_id, new_updated_data, session=session):
-#             return True
-#
-#     else:
-#         if old_date.date() == new_date.date():
-#             if mongoApi.update_event(user_id, event_id, old_date, updated_data, session=session):
-#                 return True
-#         else:
-#             updated_event = dict_to_entities.create_new_event(updated_data)
-#             if mongoApi.delete_event(user_id, old_date, event_id, session=session):
-#                 if mongoApi.add_event(user_id, updated_event, new_date, session=session):
-#                     return True
-#
-#     return False
-
-
+# Function for handling event updates
 def update_event(user_id, old_date, new_date, event_id, updated_data, session):
     item_type = updated_data.get('item_type')
     if item_type == 'recurring event':
+        # If it's a recurring event changed to normal,
+        # removing from the recurring event list and adding the updated event to the calendar
         if updated_data.get('frequency') == 'Once':
             event_dict = get_recurring_event(user_id, event_id, session=session)
             if event_dict is None:
@@ -198,8 +164,8 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
                     return True
 
         else:
+            # Updating fields of the recurring event
             updated_data['first_appearance'] = new_date.isoformat()
-
             if mongoApi.update_recurring_event(user_id, event_id, updated_data, session=session):
                 return True
 
@@ -234,6 +200,7 @@ def update_event(user_id, old_date, new_date, event_id, updated_data, session):
     return False
 
 
+# Updating task and recurring task in the DB
 def update_task(user_id, task_id, updated_data, session):
     item_type = updated_data.get('item_type')
     if item_type == 'recurring task':
@@ -281,7 +248,9 @@ def update_task(user_id, task_id, updated_data, session):
         return False
 
 
+# Function to get the task list with the recurring tasks instances
 def get_task_list(user_id, deadline=None, session=None):
+    # Adding recurring tasks instances if needed
     if not insert_recurring_tasks_to_task_list(user_id, session=session):
         return None
 
@@ -297,6 +266,7 @@ def get_task_list(user_id, deadline=None, session=None):
     return filtered_task_list.__dict__()
 
 
+# Function to insert recurring tasks instances if needed
 def insert_recurring_tasks_to_task_list(user_id, session):
     recurring_tasks_dict = mongoApi.get_recurring_tasks(user_id, session=session)
     if recurring_tasks_dict is None:
@@ -306,8 +276,6 @@ def insert_recurring_tasks_to_task_list(user_id, session):
     if not recurring_tasks_dict:
         return True
 
-    # trying that current date would be not just by date
-    # current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
     current_date = datetime.now()
     recurring_tasks = dict_to_entities.dict_to_task_list(recurring_tasks_dict)
     for recurring_task in recurring_tasks.list_of_tasks:
@@ -341,7 +309,7 @@ def insert_recurring_tasks_to_task_list(user_id, session):
     return True
 
 
-# works for a week from Sunday to Saturday and not Monday to Sunday
+# Function to calculate the deadline for a recurring task instance
 def find_deadline_for_next_recurring_task(recurring_task, current_date):
     deadline = None
     recurrence_pattern = recurring_task.frequency
@@ -365,6 +333,7 @@ def find_deadline_for_next_recurring_task(recurring_task, current_date):
     return deadline
 
 
+# Function to get a specific recurring event by id
 def get_recurring_event(user_id, event_id, session):
     recurring_events = mongoApi.get_recurring_events(user_id, session=session)
     if not recurring_events:
@@ -377,6 +346,7 @@ def get_recurring_event(user_id, event_id, session):
     return None
 
 
+# Function to get a specific recurring task by id
 def get_recurring_task(user_id, task_id, session):
     recurring_tasks = mongoApi.get_recurring_tasks(user_id, session=session)
     if not recurring_tasks:
@@ -390,6 +360,7 @@ def get_recurring_task(user_id, task_id, session):
     return None
 
 
+# Function to find a specific task from the task list
 def get_task(user_id, task_id, session):
     tasks = mongoApi.get_task_list(user_id, session=session)
     if not tasks:
@@ -403,6 +374,7 @@ def get_task(user_id, task_id, session):
     return None
 
 
+# Function for save and automate task create the tasks needed and return it with the end date for the schedule algorithm
 def add_task_and_automate(user_id, task_data, session):
     task = dict_to_entities_from_requests.create_new_task(user_id, task_data, session=session)
     current_date = datetime.now()
@@ -411,18 +383,13 @@ def add_task_and_automate(user_id, task_data, session):
 
     end_time = datetime.today() + timedelta(days=7)
     if task.frequency == "Once" or task.frequency is None:
-        # if not mongoApi.add_task(user_id, task, session=session):
-        # return None, None
-
         end_time = task.deadline if task.deadline is not None and task.deadline < end_time else end_time
         return task, end_time
+
     else:
-        # From here, added for handling the deadline in recurring task
-        # current_date = datetime(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day)
         deadline = find_deadline_for_next_recurring_task(task, current_date)
         if task.deadline and deadline > task.deadline:
             deadline = task.deadline
-        # To here
 
         task_instance = task.generate_recurring_instance(deadline)
         task.previous_done = deadline

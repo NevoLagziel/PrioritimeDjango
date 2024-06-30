@@ -5,7 +5,7 @@ from . import mongo_utils
 users = db['users']  # users collection
 
 
-# returns if the user exists or not
+# returns if the user exists or not by email or id
 def user_exists(user_id=None, email=None, session=None):
     user_exist = 0
     if user_id:
@@ -28,6 +28,7 @@ def delete_user(user_id, session):
     return result.deleted_count == 1
 
 
+# Check if email confirmed already or not
 def does_email_confirmed(confirmation_token, session):
     result = users.find_one(
         {'confirmation_token': confirmation_token},
@@ -47,6 +48,7 @@ def confirm_email(confirmation_token, session):
     return result.modified_count == 1
 
 
+# Returns the user info specified in the filed array
 def get_user_info(user_id=None, email=None, fields=None, session=None):
     user_info = None
     projection = {}
@@ -70,6 +72,7 @@ def get_user_info(user_id=None, email=None, fields=None, session=None):
     return user_info
 
 
+# Check if email address in use by other user
 def check_email_can_be_changed(user_id, email, session):
     user_info = get_user_info(email=email, fields=['_id'], session=session)
     if user_info is not None:
@@ -79,8 +82,10 @@ def check_email_can_be_changed(user_id, email, session):
     return True
 
 
+# Updating the user details, firstName, lastName, email
 def update_user_info(user_id, updated_data, session):
     user_id = ObjectId(user_id)
+    # Check to update only the valid data received
     update_fields = {f"{key}": value for key, value in updated_data.items() if value is not None and len(value) > 0}
     result = users.update_one(
         {'_id': user_id},
@@ -138,7 +143,7 @@ def get_schedule(user_id, date, session):
     day = date.day
     user_id = ObjectId(user_id)
 
-    # Execute the aggregation pipeline
+    # Execute the aggregation pipeline for returning only the daly schedule requested
     schedule = users.aggregate([
         {"$match": {"_id": user_id}},
         {"$unwind": "$calendar"},
@@ -184,7 +189,7 @@ def update_schedule(user_id, date, schedule, session):
     return result.modified_count > 0
 
 
-# not sure if needed
+# Adding new full year if needed
 def add_new_year(user_id, year, session):
     user = ObjectId(user_id)
     yearly_calendar = mongo_utils.create_new_year(year)
@@ -200,13 +205,14 @@ def add_new_year(user_id, year, session):
     return result.modified_count > 0
 
 
-# function for checking if a certain year is already presented in the database
+# Function for checking if a certain year is already presented in the database
 def year_exists(user_id, year, session):
     user = ObjectId(user_id)
     year_count = users.count_documents({"_id": user, "calendar.year": year}, session=session)
     return year_count > 0
 
 
+# delete the full year from db
 def delete_year(user_id, year, session):
     user_id = ObjectId(user_id)
     result = users.update_one(
@@ -225,7 +231,7 @@ def delete_year(user_id, year, session):
     return result.modified_count > 0
 
 
-# Function for adding a new event to a users database without checking collisions
+# Function for adding a new event to a users database
 def add_event(user_id, event, date, session):
     year = date.year
     month = date.month
@@ -258,6 +264,7 @@ def add_event(user_id, event, date, session):
         ]
         , session=session)
 
+    # Updating the yearly event counter
     if result.modified_count > 0:
         if increment_event_count(user_id, year, session):
             return True
@@ -265,6 +272,7 @@ def add_event(user_id, event, date, session):
     return False
 
 
+# Function for adding a new recurring event to a users database
 def add_recurring_event(user_id, event, session):
     user_id = ObjectId(user_id)
     event_dict = event.__dict__()
@@ -279,6 +287,7 @@ def add_recurring_event(user_id, event, session):
     return result.modified_count > 0
 
 
+# Returns the recurring events list
 def get_recurring_events(user_id, session):
     user_id = ObjectId(user_id)
     recurring_events = users.find_one(
@@ -291,6 +300,7 @@ def get_recurring_events(user_id, session):
     return recurring_events['recurring_events']
 
 
+# Returns specific event by date and id
 def get_event(user_id, date, event_id, session):
     user_id = ObjectId(user_id)
     year = date.year
@@ -315,6 +325,7 @@ def get_event(user_id, date, event_id, session):
     return event_dict[0]
 
 
+# Updating event fields in place
 def update_event(user_id, event_id, date, updated_data, session):
     year = date.year
     month = date.month
@@ -340,6 +351,7 @@ def update_event(user_id, event_id, date, updated_data, session):
     return result.modified_count > 0
 
 
+# Updating event fields in place
 def update_recurring_event(user_id, event_id, updated_data, session):
     user_id = ObjectId(user_id)
     update_fields = {f"recurring_events.$[event].{key}": value for key, value in updated_data.items() if
@@ -352,6 +364,7 @@ def update_recurring_event(user_id, event_id, updated_data, session):
     return result.modified_count > 0
 
 
+# Removing an event from the calendar
 def delete_event(user_id, date, event_id, session):
     user_id = ObjectId(user_id)
     year = date.year
@@ -376,6 +389,7 @@ def delete_event(user_id, date, event_id, session):
         ]
         , session=session)
 
+    # Changing yearly event count accordingly and removing year if not in use
     if result.modified_count > 0:
         if decrement_event_count(user_id, date.year, session=session):
             if not check_empty_year(user_id, date.year, session=session):
@@ -387,6 +401,7 @@ def delete_event(user_id, date, event_id, session):
     return False
 
 
+# Removing a recurring event from the recurring events list
 def delete_recurring_event(user_id, event_id, session):
     user_id = ObjectId(user_id)
     result = users.update_one(
@@ -396,6 +411,7 @@ def delete_recurring_event(user_id, event_id, session):
     return result.modified_count > 0
 
 
+# Returns the unscheduled task list
 def get_task_list(user_id, session):  # returns tasks list as dictionary
     user_id = ObjectId(user_id)
     task_list = users.find_one(
@@ -408,6 +424,7 @@ def get_task_list(user_id, session):  # returns tasks list as dictionary
     return task_list
 
 
+# Adding a task to the task list
 def add_task(user_id, task, session):
     user_id = ObjectId(user_id)
     task_dict = task.__dict__()
@@ -424,6 +441,7 @@ def add_task(user_id, task, session):
     return result.modified_count > 0
 
 
+# Removing a task from the task list
 def delete_task(user_id, task_id, session):
     user_id = ObjectId(user_id)
     result = users.update_one(
@@ -433,6 +451,7 @@ def delete_task(user_id, task_id, session):
     return result.modified_count > 0
 
 
+# Updating a task fields in the task list in place
 def update_task(user_id, task_id, updated_data, session):
     user_id = ObjectId(user_id)
     update_fields = {f"task_list.$[task].{key}": value for key, value in updated_data.items() if value is not None}
@@ -444,6 +463,7 @@ def update_task(user_id, task_id, updated_data, session):
     return result.modified_count > 0
 
 
+# Adding a task to recurring tasks list
 def add_recurring_task(user_id, task, session):
     user_id = ObjectId(user_id)
     task_dict = task.__dict__()
@@ -458,6 +478,7 @@ def add_recurring_task(user_id, task, session):
     return result.modified_count > 0
 
 
+# Returns the recurring tasks list
 def get_recurring_tasks(user_id, session):
     user_id = ObjectId(user_id)
     recurring_tasks = users.find_one(
@@ -470,6 +491,7 @@ def get_recurring_tasks(user_id, session):
     return recurring_tasks
 
 
+# Updating a recurring task fields in place
 def update_recurring_task(user_id, task_id, updated_data, session):
     user_id = ObjectId(user_id)
     update_fields = {f"recurring_tasks.$[task].{key}": value for key, value in updated_data.items()}
@@ -481,6 +503,7 @@ def update_recurring_task(user_id, task_id, updated_data, session):
     return result.modified_count > 0
 
 
+# Removes a recurring task from the recurring task list
 def delete_recurring_task(user_id, task_id, session):
     user_id = ObjectId(user_id)
     result = users.update_one(
@@ -490,6 +513,7 @@ def delete_recurring_task(user_id, task_id, session):
     return result.modified_count > 0
 
 
+# Check if a year is not in use and could be deleted
 def check_empty_year(user_id, year, session):
     user_id = ObjectId(user_id)
     event_count_zero = users.count_documents(
@@ -510,6 +534,7 @@ def check_empty_year(user_id, year, session):
     return event_count_zero > 0 and days_off_count_zero > 0
 
 
+# Adds 1 to the yearly event counter
 def increment_event_count(user_id, year, session):
     result = users.update_one(
         {
@@ -525,6 +550,7 @@ def increment_event_count(user_id, year, session):
     return result.modified_count > 0
 
 
+# Subtract 1 from the yearly event counter
 def decrement_event_count(user_id, year, session):
     result = users.update_one(
         {
@@ -540,18 +566,7 @@ def decrement_event_count(user_id, year, session):
     return result.modified_count > 0
 
 
-def get_preferences(user_id, session):
-    user_id = ObjectId(user_id)
-    preferences = users.find_one(
-        {'_id': user_id},
-        {
-            'preferences': 1,
-            '_id': 0
-        }
-        , session=session)
-    return preferences['preferences']
-
-
+# Update the user preferences to the received data (removing data that not specified)
 def update_preferences(user_id, preference_manager, session):
     user_id = ObjectId(user_id)
     result = users.update_one(
@@ -561,15 +576,7 @@ def update_preferences(user_id, preference_manager, session):
     return result.modified_count > 0
 
 
-def delete_preference(user_id, preference, session):
-    user_id = ObjectId(user_id)
-    result = users.delete_one(
-        {'_id': user_id},
-        {f'preferences.{preference}'}
-        , session=session)
-    return result.modified_count > 0
-
-
+# Returns the user preferences
 def get_user_preferences(user_id, session):
     user_id = ObjectId(user_id)
     user_preferences = users.find_one(
@@ -583,6 +590,7 @@ def get_user_preferences(user_id, session):
     return user_preferences['user_preferences']
 
 
+# Returns specific asked fields from the user preferences, mentioned in the fields array
 def find_preferences(user_id, fields, session):
     find_fields = {f'user_preferences.{field}': 1 for field in fields}
     user_id = ObjectId(user_id)
@@ -593,6 +601,7 @@ def find_preferences(user_id, fields, session):
     return preference['user_preferences']
 
 
+# Update a daily schedule to be a day off or the other way
 def update_day_off(user_id, date, day_off, session):
     year = date.year
     month = date.month
@@ -600,6 +609,7 @@ def update_day_off(user_id, date, day_off, session):
 
     year_exist = year_exists(user_id, year, session)
 
+    # Check if a year needs to be added for saving the data
     if not year_exist:
         if day_off:
             if not add_new_year(user_id, year, session):
@@ -631,6 +641,7 @@ def update_day_off(user_id, date, day_off, session):
     if not result.modified_count > 0:
         return False
 
+    # changes the day of yearly count accordingly
     if day_off:
         if increment_day_off_count(user_id, year, session):
             return True
@@ -645,6 +656,7 @@ def update_day_off(user_id, date, day_off, session):
     return False
 
 
+# Adding 1 to day off yearly counter
 def increment_day_off_count(user_id, year, session):
     result = users.update_one(
         {
@@ -660,6 +672,7 @@ def increment_day_off_count(user_id, year, session):
     return result.modified_count > 0
 
 
+# Subtracting 1 from day off yearly counter
 def decrement_day_off_count(user_id, year, session):
     result = users.update_one(
         {
@@ -673,76 +686,3 @@ def decrement_day_off_count(user_id, year, session):
         }
         , session=session)
     return result.modified_count > 0
-
-# def add_event_to(user_id):
-#     user_id = ObjectId(user_id)
-#     event = calendar_objects.Event(
-#         name='name',
-#         description='description',
-#         start_time='12',
-#         end_time='13'
-#     ).__dict__()
-#     year = '2026'
-#     month = '12'
-#     day = '11'
-#     result = users.update_one(
-#         {'_id': user_id},
-#         {'$addToSet': {'calendar_dict.'+year+'.'+month+"."+day+".event_list": event}}
-#     )
-#     return result.modified_count > 0
-
-
-# def get_dict_schedule(user_id):
-#     user_id = ObjectId(user_id)
-#     year = '2027'
-#     month = '10'
-#     day = '2'
-#
-#     schedule_dict = users.aggregate([
-#         {"$match": {"_id": user_id}},
-#         {"$unwind": "$calendar_dict."+year+"."+month+"."+day},
-#         {"$replaceRoot": {"newRoot": "$calendar_dict."+year+"."+month+"."+day}}
-#     ])
-#     schedule_dict = list(schedule_dict)
-#     print(schedule_dict)
-#     return schedule_dict[0]
-
-
-# def calendar_as_dict(user_id):
-#     user_id = ObjectId(user_id)
-#     event_list = []
-#     year = '2025'
-#     calendar_dict = {
-#         "event_count": 0,
-#         '10':
-#             {
-#                 '1': {"event_list": event_list, "event_count": 0, "day": 7},
-#                 '2': {"event_list": event_list, "event_count": 0, "day": 7},
-#                 '3': {"event_list": event_list, "event_count": 0, "day": 7},
-#             },
-#         '11':
-#             {
-#                 '1': {"event_list": event_list, "event_count": 0, "day": 7},
-#                 '2': {"event_list": event_list, "event_count": 0, "day": 7},
-#                 '3': {"event_list": event_list, "event_count": 0, "day": 7},
-#             },
-#         '12':
-#             {
-#                 '1': {"event_list": event_list, "event_count": 0, "day": 7},
-#                 '2': {"event_list": event_list, "event_count": 0, "day": 7},
-#                 '3': {"event_list": event_list, "event_count": 0, "day": 7},
-#             }
-#
-#     }
-#     result = users.update_one(
-#         {"_id": user_id},
-#         {"$set": {"calendar_dict."+year: calendar_dict}}
-#     )
-#     year = '2024'
-#     month = '10'
-#     day = '2'
-#     result = users.find_one(
-#         {"_id": user_id},
-#         {"calendar_dict."+year+"."+month+"."+day: 1}
-#     )
-#     print(result)

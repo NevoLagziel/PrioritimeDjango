@@ -85,7 +85,8 @@ def delete_task(request, user_id, task_id):
 @user_authorization
 def edit_task(request, user_id, task_id):
     if request.method == 'PUT':
-        updated_data = dict_to_entities_from_requests.organize_data_edit_task(request.data)
+        # updated_data = dict_to_entities_from_requests.organize_data_edit_task(request.data)
+        updated_data = dict_to_entities_from_requests.organize_entered_data_calendar_objects(data=request.data, task=True)
         with client.start_session() as session:
             try:
                 session.start_transaction()

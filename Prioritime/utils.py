@@ -50,8 +50,12 @@ def create_new_user(email, hashed_password, first_name, last_name, confirmation_
 
 def is_iso_date(date_string):
     try:
+        if not date_string:
+            return False
+
         datetime.fromisoformat(date_string)
         return True
+
     except ValueError:
         return False
 

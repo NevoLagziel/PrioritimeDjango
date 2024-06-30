@@ -63,6 +63,7 @@ class PreferenceManager:
         }
         return user_preferences
 
+    # sending to the frontend different dict
     def dict_for_json(self):
         user_preferences = {
             'preferences': [],
@@ -73,11 +74,3 @@ class PreferenceManager:
         for name, preference in self.preferences.items():
             user_preferences['preferences'].append(preference.__dict__())
         return user_preferences
-
-    def apply_preferences(self, calendar_item):
-        preference = self.preferences.get(calendar_item.name)
-        if preference:
-            overridden = any(getattr(calendar_item, key) is not None for key in preference)
-            if not overridden:
-                for attr, value in preference.items():
-                    setattr(calendar_item, attr, value)

@@ -85,7 +85,8 @@ def get_event(request, user_id, event_id, date):
 @user_authorization
 def edit_event(request, user_id, event_id, date):
     if request.method == 'PUT':
-        data = dict_to_entities_from_requests.organize_data_edit_event(request.data)
+        data = dict_to_entities_from_requests.organize_entered_data_calendar_objects(data=request.data, event=True)
+        # data = dict_to_entities_from_requests.organize_data_edit_event(request.data)
         with client.start_session() as session:
             try:
                 session.start_transaction()
@@ -93,7 +94,7 @@ def edit_event(request, user_id, event_id, date):
                 new_date = old_date if data.get('start_time') is None else datetime.fromisoformat(
                     data.get('start_time'))
                 end_date = old_date if data.get('end_time') is None else datetime.fromisoformat(data.get('end_time'))
-                if new_date > end_date or new_date.date() != old_date.date():
+                if new_date > end_date or new_date.date() != end_date.date():
                     session.abort_transaction()
                     return JsonResponse({'error': 'Start comes after end, or on different dates'}, status=400)
 

@@ -24,7 +24,7 @@ def index(request):
     return HttpResponse("Hello, world. You're at the k")
 
 
-# Wrapper function that versify the user
+# Wrapper function that versify the user by JWT
 def user_authorization(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -300,7 +300,9 @@ def update_user_info(request, user_id):
                 session.start_transaction()
                 updated_data = dict_to_entities_from_requests.organize_data_edit_user_info(request.data)
                 email = updated_data.get('email')
-                email_validator(email)
+                if not utils.validate_email(email):
+                    return JsonResponse({'error': 'Email address must be valid'}, status=400)
+
                 if not mongoApi.check_email_can_be_changed(user_id=user_id, email=email, session=session):
                     session.abort_transaction()
                     return JsonResponse({'error': 'User with this email already exists'}, status=409)
@@ -373,7 +375,6 @@ def get_preferences(request, user_id):
 def update_preferences(request, user_id):
     if request.method == 'POST':
         data = request.data
-        print(data)
         with client.start_session() as session:
             try:
                 session.start_transaction()

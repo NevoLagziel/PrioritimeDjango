@@ -80,9 +80,6 @@ class Task(CalendarItem):
         self.end_time = end_time if end_time is None else datetime.fromisoformat(end_time)
         self.item_type = item_type if item_type is not None else 'task'
 
-    def task_completed(self):
-        self.status = 'done'
-
     def __dict__(self):
         task_dict = super().__dict__()
         task_dict['priority'] = self.priority
@@ -177,21 +174,6 @@ class Tasks:
 
         return task_list
 
-    def filter_by_date(self, date_start=None, date_end=None):
-        task_list = []
-        if date_start is None:
-            return task_list
-
-        if date_end is None:
-            date_end = date_start
-
-        for task in self.list_of_tasks:
-            if task.start_time is not None:
-                if date_start <= task.start_time <= date_end:
-                    task_list.append(task)
-
-        return task_list
-
 
 class Schedule:
     def __init__(self, date, day, start_time=None, end_time=None, event_list=None, day_off=False):
@@ -215,20 +197,12 @@ class Schedule:
             'end_time': self.end_time,
             'event_list': dict_event_list,
             'day_off': self.day_off,
-            # added for Amit
+            # added for Java
             'event_count': len(self.event_list)
         }
         return dict_schedule
 
-    def set_day_off(self, day_off=False):
-        self.day_off = day_off
-
-    def set_start_time(self, start_time):
-        self.start_time = start_time
-
-    def set_end_time(self, end_time):
-        self.start_time = end_time
-
+    # Calculate free time blocks in the schedule
     def free_time_init(self, start_time, end_time):
         free_times = []
 
@@ -261,34 +235,9 @@ class Schedule:
 
         return free_times
 
-    def check_time_availability(self, start_time, duration):
-        start_time = datetime.fromisoformat(start_time)
-        end_time = (start_time + duration).time().isoformat()
-        start_time = start_time.time().isoformat()
-
-        if end_time <= start_time:
-            return False
-
-        if self.start_time > start_time or end_time > self.end_time:
-            return False
-
-        for event in self.event_list:
-            if event.end_time > start_time and event.start_time < end_time:
-                return False
-
-        return True
-
     def add_event(self, new_event):
         self.event_list.append(new_event)
         self.event_list.sort(key=lambda x: x.start_time, reverse=True)
-
-    def add_task(self, new_task):
-        if self.check_time_availability(new_task.start_time, new_task.duration):
-            self.event_list.append(new_task)
-            self.event_list.sort(key=lambda x: x.start_time, reverse=True)
-            return True
-
-        return False
 
 
 class MonthlyCalendar:

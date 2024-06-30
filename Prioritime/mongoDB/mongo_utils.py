@@ -384,6 +384,7 @@ def add_task_and_automate(user_id, task_data, session):
     end_time = datetime.today() + timedelta(days=7)
     if task.frequency == "Once" or task.frequency is None:
         end_time = task.deadline if task.deadline is not None and task.deadline < end_time else end_time
+        task.status = "active"
         return task, end_time
 
     else:

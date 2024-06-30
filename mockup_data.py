@@ -32,6 +32,9 @@ def generate_random_events(num_events):
                                                       datetime_end=(datetime.now() + timedelta(days=150)))
         duration = random.randint(30, 500)
         end_datetime = start_datetime + timedelta(minutes=duration)
+        if end_datetime != start_datetime.date():
+            end_datetime = start_datetime.replace(hour=23, minute=59, second=59)
+
         recurring = random.choices(recurrence_options, weights=recurrence_weights, k=1)[0]
         events.append({
             "_id": str(ObjectId()),
@@ -161,6 +164,6 @@ def generate_random_user(num_events=2, num_tasks=3):
 # Generate and insert mockup data
 num_users = 1
 for _ in range(num_users):
-    random_user, printable_user = generate_random_user(20, 20)
+    random_user, printable_user = generate_random_user(50, 50)
     users.insert_one(random_user)
     print(json.dumps(printable_user, indent=4))

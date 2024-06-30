@@ -76,7 +76,7 @@ def create_new_event(data):
         sub_event=data.get('sub_event'),
     )
 
-    if event.start_time > event.end_time:
+    if event.start_time > event.end_time or event.start_time.date() != event.end_time.date():
         return None
 
     return event

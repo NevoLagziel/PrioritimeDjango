@@ -93,9 +93,9 @@ def edit_event(request, user_id, event_id, date):
                 new_date = old_date if data.get('start_time') is None else datetime.fromisoformat(
                     data.get('start_time'))
                 end_date = old_date if data.get('end_time') is None else datetime.fromisoformat(data.get('end_time'))
-                if new_date > end_date:
+                if new_date > end_date or new_date.date() != old_date.date():
                     session.abort_transaction()
-                    return JsonResponse({'error': 'Start comes after end'}, status=400)
+                    return JsonResponse({'error': 'Start comes after end, or on different dates'}, status=400)
 
                 if mongo_utils.update_event(user_id, old_date, new_date, event_id, data, session=session):
                     session.commit_transaction()

@@ -116,6 +116,7 @@ def add_task_and_automate(request, user_id):
 @user_authorization
 def automatic_scheduling(request, user_id):
     if request.method == 'POST':
+        t1 = datetime.now()
         start_date = request.data.get('start_date')
         end_date = request.data.get('end_date')
         tasks_id_list = request.data.get('tasks')
@@ -137,6 +138,8 @@ def automatic_scheduling(request, user_id):
                 results = schedule_tasks_by_id_list(user_id, tasks_id_list, start_date, end_date, session=session)
                 if results:
                     session.commit_transaction()
+                    t2 = datetime.now()
+                    print("time: ", t2-t1)
                     return JsonResponse({'scheduled_tasks': results}, status=200)
                 else:
                     session.abort_transaction()

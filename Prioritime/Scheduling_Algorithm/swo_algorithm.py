@@ -162,6 +162,7 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
     best_utility = float('-inf')
     unscheduled_activities = None
     consecutive_no_improvement = 0
+    best_possible_utility = 0
 
     # if len(activities) == 1:
     #     best_start_time = find_best_start_time(activities[0], prev_start=prev_schedule[
@@ -183,6 +184,13 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
                              prev_start=None if prev_schedule is None else prev_schedule[activity.id].start_time)
         for
         activity in activities}
+
+    for i, util in activity_utilities.items():
+        if util < (-100):
+            util = -20
+        best_possible_utility += util
+
+    print('best utility: ', best_possible_utility)
 
     # promotion_dict = dict.fromkeys(activity.id for activity in activities)
     promotions = []
@@ -238,7 +246,9 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
 
         # Calculate utility including penalties for unscheduled activities
         current_utility = sum(
-            utility(act, planned_start=current_plan[act.id][0] if current_plan[act.id] else 0, prev_start=None if prev_schedule is None else prev_schedule[act.id].start_time) for act in activities)
+            utility(act, planned_start=current_plan[act.id][0] if current_plan[act.id] else 0,
+                    prev_start=None if prev_schedule is None else prev_schedule[act.id].start_time) for act in
+            activities)
 
         penalty = -len(current_unscheduled_activities) * 20  # Adjust the penalty weight as needed
         # to make sure it would pick a different result
@@ -259,6 +269,9 @@ def schedule_activities(activities, max_iterations=1000, early_termination_conse
         if consecutive_no_improvement >= early_termination_consecutive:
             break
 
+    print("Best utility: ", best_utility)
+    if best_possible_utility > 0:
+        print("Percentage:", ((best_utility/best_possible_utility)*100))
     return best_plan, unscheduled_activities
 
 # # Example usage

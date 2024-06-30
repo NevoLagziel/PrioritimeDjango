@@ -1,4 +1,3 @@
-
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from config import MONGODB_URI
@@ -13,4 +12,4 @@ try:
 except Exception as e:
     print(e)
 
-db = client['sample_analytics']
+db = client['prioritime']
